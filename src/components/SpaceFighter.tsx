@@ -21,7 +21,7 @@ interface SpaceFighterProps {
   scale?: number;
   gameState: 'start' | 'playing' | 'gameover';
   onCollision: () => void;
-  onPositionUpdate: (position: [number, number, number]) => void;
+  onPositionUpdate: (pos: [number, number, number]) => void;
 }
 
 const SpaceFighter = ({
@@ -183,7 +183,7 @@ const SpaceFighter = ({
       angularDamping={0.95}
       sensor
       onIntersectionEnter={onCollision}
-      active={gameState === 'playing'}
+      enabled={gameState === 'playing'}
     >
       <mesh
         geometry={nodes.model.geometry}

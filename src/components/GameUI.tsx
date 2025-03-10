@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
+import PriceDisplay from './PriceDisplay';
+import { PriceData } from './PriceFeed';
 
 interface GameUIProps {
   gameState: 'start' | 'playing' | 'gameover';
   score: number;
   onStartGame: () => void;
   onRestartGame: () => void;
+  priceData: PriceData | null;
 }
 
 const GameUI = ({
@@ -14,6 +17,7 @@ const GameUI = ({
   score,
   onStartGame,
   onRestartGame,
+  priceData,
 }: GameUIProps) => {
   const { viewport } = useThree();
   const [spacePressed, setSpacePressed] = useState(false);
@@ -55,6 +59,7 @@ const GameUI = ({
         >
           Press SPACE to start
         </Text>
+        <PriceDisplay priceData={priceData} />
       </group>
     );
   }
@@ -96,21 +101,25 @@ const GameUI = ({
             Try Again
           </Text>
         </group>
+        <PriceDisplay priceData={priceData} />
       </group>
     );
   }
 
   // In-game UI (score)
   return (
-    <Text
-      position={[-viewport.width / 2 + 2, viewport.height / 2 - 1, 0]}
-      fontSize={0.5}
-      color="#ffffff"
-      anchorX="left"
-      anchorY="top"
-    >
-      Score: {score}
-    </Text>
+    <>
+      <Text
+        position={[-viewport.width / 2 + 2, viewport.height / 2 - 1, 0]}
+        fontSize={0.5}
+        color="#ffffff"
+        anchorX="left"
+        anchorY="top"
+      >
+        Score: {score}
+      </Text>
+      <PriceDisplay priceData={priceData} />
+    </>
   );
 };
 

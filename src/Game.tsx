@@ -10,6 +10,7 @@ import SpaceFighter from './components/SpaceFighter';
 import EndlessTerrain from './components/EndlessTerrain';
 import GameUI from './components/GameUI';
 import Explosion from './components/Explosion';
+import PriceDataProvider, { PriceData } from './components/PriceFeed';
 import { useControls } from 'leva';
 import { Canvas } from '@react-three/fiber';
 import { Suspense, useState, KeyboardEvent, useRef, useEffect } from 'react';
@@ -25,6 +26,9 @@ const GameScene = () => {
   const [score, setScore] = useState(0);
   const scoreRef = useRef(0);
   const lastUpdateTimeRef = useRef(0);
+
+  // Price data state
+  const [priceData, setPriceData] = useState<PriceData | null>(null);
 
   // Explosion state
   const [showExplosion, setShowExplosion] = useState(false);
@@ -70,29 +74,43 @@ const GameScene = () => {
   useEffect(() => {
     if (gameState !== 'playing') return;
 
+    let animationFrameId: number;
+    let lastTime = Date.now();
+
     const updateScore = () => {
       if (gameState === 'playing') {
         const now = Date.now();
-        const deltaTime = now - lastUpdateTimeRef.current;
+        const deltaTime = now - lastTime;
 
         // Update score based on time and terrain speed
-        if (lastUpdateTimeRef.current > 0 && deltaTime > 0) {
-          scoreRef.current += Math.floor((terrainSpeed * deltaTime) / 1000);
+        if (deltaTime > 0) {
+          // Increment score based on terrain speed (faster speed = higher score rate)
+          const scoreIncrement = Math.floor((terrainSpeed * deltaTime) / 100);
+          scoreRef.current += scoreIncrement;
           setScore(scoreRef.current);
         }
 
-        lastUpdateTimeRef.current = now;
-        globalThis.window.requestAnimationFrame(updateScore);
+        lastTime = now;
+        animationFrameId = globalThis.window.requestAnimationFrame(updateScore);
       }
     };
 
-    lastUpdateTimeRef.current = Date.now();
-    const animationId = globalThis.window.requestAnimationFrame(updateScore);
+    // Start the animation frame loop
+    lastTime = Date.now();
+    animationFrameId = globalThis.window.requestAnimationFrame(updateScore);
 
+    // Clean up animation frame on unmount or when game state changes
     return () => {
-      globalThis.window.cancelAnimationFrame(animationId);
+      if (animationFrameId) {
+        globalThis.window.cancelAnimationFrame(animationFrameId);
+      }
     };
   }, [gameState, terrainSpeed]);
+
+  // Handle price updates
+  const handlePriceUpdate = (newPriceData: PriceData) => {
+    setPriceData(newPriceData);
+  };
 
   // Game control functions
   const handleStartGame = () => {
@@ -140,6 +158,9 @@ const GameScene = () => {
       tabIndex={0}
       onKeyDown={handleKeyDown}
     >
+      {/* Price Data Provider */}
+      <PriceDataProvider onPriceUpdate={handlePriceUpdate} />
+
       <Canvas
         gl={{
           antialias: true,
@@ -202,6 +223,7 @@ const GameScene = () => {
             score={score}
             onStartGame={handleStartGame}
             onRestartGame={handleRestartGame}
+            priceData={priceData}
           />
         </Suspense>
 

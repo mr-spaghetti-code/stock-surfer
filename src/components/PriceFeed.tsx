@@ -18,11 +18,11 @@ const PriceDataProvider: React.FC<PriceDataProviderProps> = ({
   onPriceUpdate,
 }) => {
   const [error, setError] = useState<string | null>(null);
-  const connectionRef = useRef<any>(null);
-  const eventSourceRef = useRef<any>(null);
+  const connectionRef = useRef<HermesClient | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
   const previousPriceRef = useRef<number | null>(null);
   const isConnectingRef = useRef<boolean>(false);
-  const reconnectTimeoutRef = useRef<any>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef<number>(0);
   const MAX_RECONNECT_ATTEMPTS = 3;
 
