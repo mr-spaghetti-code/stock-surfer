@@ -22,6 +22,7 @@ export const fragmentShader = `
   uniform float speed;
   uniform float scale;
   uniform float intensity;
+  uniform float priceTrend; // -1.0 to 1.0 value representing price trend
   
   varying vec2 vUv;
   varying vec3 vPosition;
@@ -113,13 +114,36 @@ export const fragmentShader = `
     pattern += sin(noise3 * 12.56636 + time * speed * 2.0) * 0.125 + 0.125;
     pattern = pattern / 1.875; // Normalize to 0-1 range
     
-    // Create color gradients
-    vec3 color = mix(color1, color2, pattern);
-    color = mix(color, color3, sin(time * speed * 0.5) * 0.5 + 0.5);
+    // Define trend-based colors
+    vec3 upTrendColor1 = vec3(0.0, 0.7, 1.0);  // Bright blue
+    vec3 upTrendColor2 = vec3(0.0, 1.0, 0.5);  // Green-cyan
+    vec3 upTrendColor3 = vec3(0.0, 0.5, 1.0);  // Medium blue
     
-    // Add pulsing intensity
-    float pulse = sin(time * speed * 0.7) * 0.5 + 0.5;
-    color *= 1.0 + pulse * intensity;
+    vec3 downTrendColor1 = vec3(1.0, 0.0, 0.0);  // Red
+    vec3 downTrendColor2 = vec3(0.7, 0.0, 0.0);  // Dark red
+    vec3 downTrendColor3 = vec3(0.5, 0.0, 0.2);  // Dark red-purple
+    
+    // Blend between provided colors and trend colors based on priceTrend
+    vec3 trendColor1 = mix(downTrendColor1, upTrendColor1, clamp(priceTrend * 0.5 + 0.5, 0.0, 1.0));
+    vec3 trendColor2 = mix(downTrendColor2, upTrendColor2, clamp(priceTrend * 0.5 + 0.5, 0.0, 1.0));
+    vec3 trendColor3 = mix(downTrendColor3, upTrendColor3, clamp(priceTrend * 0.5 + 0.5, 0.0, 1.0));
+    
+    // Mix with the original colors (with trend colors having more weight when trend is stronger)
+    vec3 finalColor1 = mix(color1, trendColor1, abs(priceTrend));
+    vec3 finalColor2 = mix(color2, trendColor2, abs(priceTrend));
+    vec3 finalColor3 = mix(color3, trendColor3, abs(priceTrend));
+    
+    // Create color gradients
+    vec3 color = mix(finalColor1, finalColor2, pattern);
+    color = mix(color, finalColor3, sin(time * speed * 0.5) * 0.5 + 0.5);
+    
+    // Add pulsing intensity (faster for downtrend, slower for uptrend)
+    float pulseSpeed = speed * (0.7 + 0.3 * (1.0 - priceTrend));
+    float pulse = sin(time * pulseSpeed) * 0.5 + 0.5;
+    
+    // Adjust brightness based on trend (darker for downtrend)
+    float brightnessAdjust = 1.0 - (priceTrend < 0.0 ? abs(priceTrend) * 0.3 : 0.0);
+    color *= brightnessAdjust * (1.0 + pulse * intensity);
     
     // Output final color
     gl_FragColor = vec4(color, 1.0);

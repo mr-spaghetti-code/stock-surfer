@@ -18,6 +18,7 @@ interface EndlessTerrainProps {
   volatilityScalar?: number;
   transparencyDistance?: number; // Maximum distance for transparency effect
   minOpacity?: number; // Minimum opacity for closest objects
+  gameState?: 'start' | 'instructions' | 'playing' | 'gameover'; // Add gameState prop
 }
 
 interface BoxData {
@@ -48,6 +49,7 @@ const EndlessTerrain = ({
   volatilityScalar = 5.0, // Default volatility scalar - higher values = more dramatic height changes
   transparencyDistance = 30, // Distance within which objects become transparent
   minOpacity = 0.4, // Minimum opacity for closest objects
+  gameState = 'start', // Default to start state
 }: EndlessTerrainProps) => {
   const terrainRef = useRef<THREE.Group>(null);
   const boxRefs = useRef<(THREE.Mesh | null)[]>([]);
@@ -59,6 +61,9 @@ const EndlessTerrain = ({
   const heightMultiplierRef = useRef<number>(1);
   // Store material refs to update opacity
   const materialRefs = useRef<(THREE.Material | null)[]>([]);
+
+  // Previous game state ref to detect changes
+  const prevGameStateRef = useRef<string>(gameState);
 
   // Update height multiplier when price data changes
   useEffect(() => {
@@ -97,6 +102,70 @@ const EndlessTerrain = ({
       lastPriceRef.current = priceData.price;
     }
   }, [priceData, volatilityScalar]);
+
+  // Reset terrain when game state changes from 'gameover' to 'playing'
+  useEffect(() => {
+    // Only reset when transitioning from gameover to playing
+    if (prevGameStateRef.current === 'gameover' && gameState === 'playing') {
+      console.log('Resetting terrain from gameover to playing state');
+
+      // Reset height multiplier
+      heightMultiplierRef.current = 1;
+
+      // Reset boxes to initial positions
+      const items: BoxData[] = [];
+      const halfWidth = width / 2;
+
+      for (let i = 0; i < boxCount; i++) {
+        // Vary the box size
+        const boxWidth = Math.random() * 4 + 1; // Between 1 and 5
+        const boxDepth = Math.random() * 4 + 1; // Between 1 and 5
+        const height = Math.random() * 5 + 0.5; // Between 0.5 and 5.5
+
+        // Create clusters of boxes
+        const clusterFactor = Math.random() > 0.7 ? 0.2 : 1;
+        const x = (Math.random() * width - halfWidth) * clusterFactor;
+
+        // Distribute boxes throughout the depth
+        const z = Math.random() * depth - depth;
+
+        // Use cyberpunk colors
+        const colorIndex = Math.floor(Math.random() * CYBERPUNK_COLORS.length);
+        const color = CYBERPUNK_COLORS[colorIndex].clone();
+
+        // Add slight variation to the color
+        const colorVariation = (Math.random() - 0.5) * 0.2;
+        color.r += colorVariation;
+        color.g += colorVariation;
+        color.b += colorVariation;
+
+        items.push({
+          id: i,
+          position: [x, -8 + height / 2, z] as [number, number, number],
+          scale: [boxWidth, height, boxDepth] as [number, number, number],
+          color,
+          opacity: 1.0, // Start with full opacity
+          // Add some rotation for more visual interest
+          rotation: [0, Math.random() * Math.PI * 0.1, 0] as [
+            number,
+            number,
+            number,
+          ],
+        });
+      }
+
+      // Reset refs
+      boxRefs.current = Array(items.length).fill(null);
+      rigidBodyRefs.current = Array(items.length).fill(null);
+      materialRefs.current = Array(items.length).fill(null);
+
+      setBoxes(items);
+      console.log(`Terrain reset complete: ${items.length} boxes generated`);
+    }
+
+    // Update previous game state
+    prevGameStateRef.current = gameState;
+  }, [gameState, width, depth, boxCount]);
 
   // Generate initial boxes with random heights, sizes, and colors
   useMemo(() => {
@@ -266,7 +335,7 @@ const EndlessTerrain = ({
             roughness={0.8}
             metalness={0.2}
             transparent={true}
-            opacity={0.7}
+            opacity={0}
           />
         </mesh>
       </RigidBody>

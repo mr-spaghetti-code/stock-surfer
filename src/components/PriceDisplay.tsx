@@ -7,11 +7,13 @@ import { VolatilityData } from '../utils/priceUtils';
 interface PriceDisplayProps {
   priceData: PriceData | null;
   volatilityData?: VolatilityData;
+  assetName?: string;
 }
 
 const PriceDisplay: React.FC<PriceDisplayProps> = ({
   priceData,
   volatilityData,
+  assetName = '',
 }) => {
   const { viewport } = useThree();
 
@@ -24,7 +26,7 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({
         anchorX="right"
         anchorY="top"
       >
-        BTC/USD: Loading...
+        Loading...
       </Text>
     );
   }
@@ -52,6 +54,19 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({
 
   return (
     <group>
+      {/* Asset Name */}
+      <Text
+        position={[viewport.width / 2 - 2, viewport.height / 2 - 0.5, 0]}
+        fontSize={0.4}
+        color="#66ccff"
+        anchorX="right"
+        anchorY="top"
+        font="/fonts/Orbitron-SemiBold.ttf"
+      >
+        {assetName}
+      </Text>
+
+      {/* Price */}
       <Text
         position={[viewport.width / 2 - 2, viewport.height / 2 - 1, 0]}
         fontSize={0.4}
@@ -59,8 +74,10 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({
         anchorX="right"
         anchorY="top"
       >
-        BTC/USD: ${formattedPrice}
+        ${formattedPrice}
       </Text>
+
+      {/* Price Change */}
       <Text
         position={[viewport.width / 2 - 2, viewport.height / 2 - 1.5, 0]}
         fontSize={0.3}
@@ -71,7 +88,7 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({
         {priceArrow} {priceChangePercent}%
       </Text>
 
-      {/* Show last update time */}
+      {/* Volatility Info */}
       <Text
         position={[viewport.width / 2 - 2, viewport.height / 2 - 2, 0]}
         fontSize={0.2}

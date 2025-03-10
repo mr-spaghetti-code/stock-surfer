@@ -15,6 +15,7 @@ export interface PriceData {
 
 interface PriceDataProviderProps {
   onPriceUpdate: (newPriceData: PriceData) => void;
+  assetId: string;
 }
 
 // Define a custom EventSource type that matches what we need
@@ -26,6 +27,7 @@ interface CustomEventSource {
 
 const PriceDataProvider: React.FC<PriceDataProviderProps> = ({
   onPriceUpdate,
+  assetId,
 }) => {
   const [error, setError] = useState<string | null>(null);
   const connectionRef = useRef<HermesClient | null>(null);
@@ -57,12 +59,12 @@ const PriceDataProvider: React.FC<PriceDataProviderProps> = ({
         );
       }
 
-      // BTC/USD price id
-      const priceIds = [
-        '0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43',
-      ];
+      // Use the provided assetId instead of hardcoded BTC/USD
+      const priceIds = [assetId];
 
-      console.log('Establishing connection to price feed...');
+      console.log(
+        `Establishing connection to price feed for asset ID: ${assetId}...`,
+      );
 
       // Start streaming price updates
       const eventSource =
@@ -119,8 +121,8 @@ const PriceDataProvider: React.FC<PriceDataProviderProps> = ({
         };
 
         // Set up error handler
-        eventSourceRef.current.onerror = (err: Event) => {
-          console.error('Error receiving updates:', err);
+        eventSourceRef.current.onerror = () => {
+          console.error('Error receiving updates');
 
           // Only set error if we don't already have one
           if (!error) {
@@ -200,7 +202,7 @@ const PriceDataProvider: React.FC<PriceDataProviderProps> = ({
     }
   };
 
-  // Initialize connection on component mount
+  // Initialize connection on component mount and when assetId changes
   useEffect(() => {
     establishConnection();
 
@@ -219,7 +221,7 @@ const PriceDataProvider: React.FC<PriceDataProviderProps> = ({
 
       connectionRef.current = null;
     };
-  }, []);
+  }, [assetId]);
 
   // This component doesn't render anything visible
   return null;

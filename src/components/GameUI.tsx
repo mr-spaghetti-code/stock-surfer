@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
 import { useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import PriceDisplay from './PriceDisplay';
 import { PriceData } from './PriceFeed';
 import { VolatilityData } from '../utils/priceUtils';
+import { useRef, useState } from 'react';
+import { useFrame } from '@react-three/fiber';
+import * as THREE from 'three';
 
 interface GameUIProps {
-  gameState: 'start' | 'playing' | 'gameover';
+  gameState: 'start' | 'instructions' | 'playing' | 'gameover';
   score: number;
   onStartGame: () => void;
   onRestartGame: () => void;
@@ -15,34 +17,77 @@ interface GameUIProps {
   difficultyMultiplier: number;
   readyToStart: boolean;
   requiredSamples: number;
+  assetName: string;
+  floorProximityBonus?: number;
+  terrainSpeed?: number;
 }
 
 const GameUI = ({
   gameState,
   score,
-  onStartGame,
+  onStartGame: _onStartGame,
   onRestartGame,
   priceData,
   volatilityData,
   difficultyMultiplier,
-  readyToStart,
+  readyToStart: _readyToStart,
   requiredSamples,
+  assetName,
+  floorProximityBonus = 0,
+  terrainSpeed = 15,
 }: GameUIProps) => {
   const { viewport } = useThree();
+  const [buttonHovered, setButtonHovered] = useState(false);
+  const buttonRef = useRef<THREE.Mesh>(null);
+  const buttonGroupRef = useRef<THREE.Group>(null);
 
-  // Handle keyboard events
-  useEffect(() => {
-    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      if (e.code === 'Space' && gameState === 'start' && readyToStart) {
-        onStartGame();
+  // Create materials for the background cards (for game over screen)
+  const darkPanelMaterial = new THREE.MeshBasicMaterial({
+    color: '#000033',
+    transparent: true,
+    opacity: 0.8,
+  });
+
+  const headerPanelMaterial = new THREE.MeshBasicMaterial({
+    color: '#330022',
+    transparent: true,
+    opacity: 0.9,
+  });
+
+  const contentPanelMaterial = new THREE.MeshBasicMaterial({
+    color: '#000022',
+    transparent: true,
+    opacity: 0.85,
+  });
+
+  // Button materials
+  const buttonMaterial = new THREE.MeshBasicMaterial({
+    color: buttonHovered ? '#4477ff' : '#3366ff',
+  });
+
+  const buttonBorderMaterial = new THREE.MeshBasicMaterial({
+    color: '#8899ff',
+    transparent: true,
+    opacity: 0.7,
+  });
+
+  // Animation for the button
+  useFrame((state) => {
+    if (gameState === 'gameover' && buttonGroupRef.current) {
+      // Subtle floating animation for the button group
+      const t = state.clock.getElapsedTime();
+      buttonGroupRef.current.position.y = -2.5 + Math.sin(t * 1.5) * 0.05;
+
+      // Pulse effect when hovered
+      if (buttonHovered && buttonRef.current) {
+        const scale = 1 + Math.sin(t * 8) * 0.05;
+        buttonRef.current.scale.set(scale, scale, 1);
+      } else if (buttonRef.current) {
+        // Smooth transition back to normal size
+        buttonRef.current.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1);
       }
-    };
-
-    globalThis.window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      globalThis.window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [gameState, onStartGame, readyToStart]);
+    }
+  });
 
   // Start screen
   if (gameState === 'start') {
@@ -54,55 +99,27 @@ const GameUI = ({
           color="#ffffff"
           anchorX="center"
           anchorY="middle"
+          font="/fonts/Orbitron-SemiBold.ttf"
         >
           SPACE SURFER
         </Text>
 
-        {readyToStart ? (
-          <Text
-            position={[0, 0, 0]}
-            fontSize={0.5}
-            color="#ffffff"
-            anchorX="center"
-            anchorY="middle"
-          >
-            Press SPACE to start
-          </Text>
-        ) : (
-          <Text
-            position={[0, 0, 0]}
-            fontSize={0.5}
-            color="#aaaaaa"
-            anchorX="center"
-            anchorY="middle"
-          >
-            Collecting price data... ({volatilityData.priceHistory.length}/
-            {requiredSamples})
-          </Text>
-        )}
-
-        {/* Display difficulty info */}
         <Text
-          position={[0, -1, 0]}
-          fontSize={0.3}
-          color="#ffaa00"
+          position={[0, 0, 0]}
+          fontSize={0.5}
+          color="#aaaaaa"
           anchorX="center"
           anchorY="middle"
         >
-          Difficulty: {difficultyMultiplier.toFixed(2)}x
+          Collecting price data... ({volatilityData.priceHistory.length}/
+          {requiredSamples})
         </Text>
 
-        <Text
-          position={[0, -1.5, 0]}
-          fontSize={0.3}
-          color="#ffaa00"
-          anchorX="center"
-          anchorY="middle"
-        >
-          Market Volatility: {(volatilityData.volatility * 100).toFixed(1)}%
-        </Text>
-
-        <PriceDisplay priceData={priceData} volatilityData={volatilityData} />
+        <PriceDisplay
+          priceData={priceData}
+          volatilityData={volatilityData}
+          assetName={assetName}
+        />
       </group>
     );
   }
@@ -111,49 +128,101 @@ const GameUI = ({
   if (gameState === 'gameover') {
     return (
       <group position={[0, 0, 0]}>
-        <Text
-          position={[0, 2, 0]}
-          fontSize={1}
-          color="#ff0000"
-          anchorX="center"
-          anchorY="middle"
-        >
-          GAME OVER
-        </Text>
-        <Text
-          position={[0, 0.5, 0]}
-          fontSize={0.5}
-          color="#ffffff"
-          anchorX="center"
-          anchorY="middle"
-        >
-          Final Score: {score}
-        </Text>
-        <Text
-          position={[0, -0.2, 0]}
-          fontSize={0.3}
-          color="#ffaa00"
-          anchorX="center"
-          anchorY="middle"
-        >
-          Difficulty: {difficultyMultiplier.toFixed(2)}x
-        </Text>
-        <group position={[0, -1, 0]} onClick={onRestartGame}>
-          <mesh>
-            <planeGeometry args={[3, 1]} />
-            <meshBasicMaterial color="#3366ff" />
+        {/* Main background panel */}
+        <mesh position={[0, 0, -0.1]} material={darkPanelMaterial}>
+          <planeGeometry args={[viewport.width * 0.9, viewport.height * 0.9]} />
+        </mesh>
+
+        {/* Header Section */}
+        <group position={[0, 3, 0]}>
+          <mesh position={[0, 0, -0.05]} material={headerPanelMaterial}>
+            <planeGeometry args={[viewport.width * 0.8, 2.5]} />
           </mesh>
           <Text
-            position={[0, 0, 0.1]}
-            fontSize={0.4}
+            position={[0, 0, 0]}
+            fontSize={1.2}
+            color="#ff3333"
+            anchorX="center"
+            anchorY="middle"
+            font="/fonts/Orbitron-SemiBold.ttf"
+          >
+            GAME OVER
+          </Text>
+        </group>
+
+        {/* Score Section */}
+        <group position={[0, 0.5, 0]}>
+          <mesh position={[0, 0, -0.05]} material={contentPanelMaterial}>
+            <planeGeometry args={[viewport.width * 0.7, 3.5]} />
+          </mesh>
+
+          <Text
+            position={[0, 1, 0]}
+            fontSize={0.7}
             color="#ffffff"
             anchorX="center"
             anchorY="middle"
+            font="/fonts/Orbitron-Medium.ttf"
           >
-            Try Again
+            Final Score: {score}
+          </Text>
+
+          <Text
+            position={[0, 0, 0]}
+            fontSize={0.4}
+            color="#ffaa00"
+            anchorX="center"
+            anchorY="middle"
+          >
+            Difficulty: {difficultyMultiplier.toFixed(2)}x
+          </Text>
+
+          <Text
+            position={[0, -1, 0]}
+            fontSize={0.35}
+            color="#aaddff"
+            anchorX="center"
+            anchorY="middle"
+          >
+            Market Volatility: {(volatilityData.volatility * 100).toFixed(1)}%
           </Text>
         </group>
-        <PriceDisplay priceData={priceData} volatilityData={volatilityData} />
+
+        {/* Try Again Button - using a group to keep button and text together */}
+        <group ref={buttonGroupRef} position={[0, -2.5, 0]}>
+          {/* Button border */}
+          <mesh position={[0, 0, -0.01]}>
+            <planeGeometry args={[5.2, 1.7]} />
+            <primitive object={buttonBorderMaterial} attach="material" />
+          </mesh>
+
+          {/* Main button */}
+          <mesh
+            ref={buttonRef}
+            onClick={onRestartGame}
+            onPointerOver={() => setButtonHovered(true)}
+            onPointerOut={() => setButtonHovered(false)}
+            material={buttonMaterial}
+          >
+            <planeGeometry args={[5, 1.5]} />
+          </mesh>
+          <Text
+            position={[0, 0, 0.1]}
+            fontSize={0.6}
+            color="#ffffff"
+            anchorX="center"
+            anchorY="middle"
+            font="/fonts/Orbitron-Medium.ttf"
+          >
+            TRY AGAIN
+          </Text>
+        </group>
+
+        <PriceDisplay
+          priceData={priceData}
+          volatilityData={volatilityData}
+          assetName={assetName}
+        />
       </group>
     );
   }
@@ -179,7 +248,31 @@ const GameUI = ({
       >
         Difficulty: {difficultyMultiplier.toFixed(2)}x
       </Text>
-      <PriceDisplay priceData={priceData} volatilityData={volatilityData} />
+      {floorProximityBonus > 0 && (
+        <Text
+          position={[-viewport.width / 2 + 2, viewport.height / 2 - 2.6, 0]}
+          fontSize={0.3}
+          color="#ff5500"
+          anchorX="left"
+          anchorY="top"
+        >
+          Floor Bonus: +{(floorProximityBonus * 100).toFixed(0)}%
+        </Text>
+      )}
+      <Text
+        position={[-viewport.width / 2 + 2, viewport.height / 2 - 3.4, 0]}
+        fontSize={0.3}
+        color={priceData && priceData.priceChange < 0 ? '#ff3333' : '#33ff33'}
+        anchorX="left"
+        anchorY="top"
+      >
+        Speed: {terrainSpeed.toFixed(1)}
+      </Text>
+      <PriceDisplay
+        priceData={priceData}
+        volatilityData={volatilityData}
+        assetName={assetName}
+      />
     </>
   );
 };

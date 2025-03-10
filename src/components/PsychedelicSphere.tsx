@@ -12,6 +12,7 @@ interface PsychedelicSphereProps {
   color1?: string;
   color2?: string;
   color3?: string;
+  priceTrend?: number; // New prop for price trend (-1 to 1)
 }
 
 const PsychedelicSphere = ({
@@ -23,6 +24,7 @@ const PsychedelicSphere = ({
   color1 = '#ff00ff', // Magenta
   color2 = '#00ffff', // Cyan
   color3 = '#ffff00', // Yellow
+  priceTrend = 0, // Default to neutral (0)
 }: PsychedelicSphereProps) => {
   const mesh = useRef<THREE.Mesh>(null);
 
@@ -52,8 +54,9 @@ const PsychedelicSphere = ({
       speed: { value: speed },
       scale: { value: scale },
       intensity: { value: intensity },
+      priceTrend: { value: priceTrend }, // Add priceTrend uniform
     }),
-    [color1Vec, color2Vec, color3Vec, speed, scale, intensity],
+    [color1Vec, color2Vec, color3Vec, speed, scale, intensity, priceTrend],
   );
 
   // Update time uniform on each frame
