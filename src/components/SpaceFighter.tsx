@@ -7,6 +7,8 @@ import { RigidBody } from '@react-three/rapier';
 
 // Import the actual RigidBody type from Rapier
 import { RapierRigidBody } from '@react-three/rapier';
+// Import the ThrusterEffect component
+import ThrusterEffect from './ThrusterEffect';
 
 // Define the type for our GLTF result
 type GLTFResult = GLTF & {
@@ -30,8 +32,8 @@ interface SpaceFighterProps {
 
 // Define a type for the position update function
 type PositionUpdateFunction = (
-  position: [number, number, number],
-  floorProximityBonus?: number,
+  pos: [number, number, number],
+  proximityBonus?: number,
 ) => void;
 
 const SpaceFighter = ({
@@ -58,6 +60,9 @@ const SpaceFighter = ({
   const [isRightPressed, setIsRightPressed] = useState(false);
   const [isUpPressed, setIsUpPressed] = useState(false);
   const [isDownPressed, setIsDownPressed] = useState(false);
+
+  // Add state to track if thrusters are active
+  const [thrustersActive, setThrustersActive] = useState(false);
 
   // Constants for physics
   const THRUST_FORCE = 1;
@@ -161,6 +166,14 @@ const SpaceFighter = ({
       rigidBodyRef.current.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
     }
   }, [gameState]);
+
+  // Update thruster state based on key presses and movement
+  useEffect(() => {
+    // Thrusters are active when any movement key is pressed
+    setThrustersActive(
+      isSpacePressed || isUpPressed || isLeftPressed || isRightPressed,
+    );
+  }, [isSpacePressed, isUpPressed, isLeftPressed, isRightPressed]);
 
   // Apply forces using Rapier physics
   useFrame(() => {
@@ -339,6 +352,16 @@ const SpaceFighter = ({
         receiveShadow
         rotation={[-Math.PI / 2, Math.PI, 0]}
       />
+
+      {/* Add the thruster effect behind the ship, positioned correctly for the ship's rotation */}
+      <group rotation={[-Math.PI / 2, Math.PI, 0]}>
+        <ThrusterEffect
+          position={[0, -0.7, 0]}
+          scale={scale * 1.2}
+          isActive={thrustersActive && gameState === 'playing'}
+          color="#00ffff"
+        />
+      </group>
     </RigidBody>
   );
 };

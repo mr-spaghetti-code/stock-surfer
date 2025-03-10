@@ -65,49 +65,33 @@ const EndlessTerrain = ({
   // Previous game state ref to detect changes
   const prevGameStateRef = useRef<string>(gameState);
 
-  // Update height multiplier when price data changes
+  // Handle game state transitions
   useEffect(() => {
-    if (priceData && priceData.previousPrice) {
-      // Calculate absolute price change percentage
-      const priceChangePercent = Math.abs(priceData.priceChangePercent);
+    // Clear terrain when transitioning to gameover
+    if (prevGameStateRef.current === 'playing' && gameState === 'gameover') {
+      console.log('Clearing terrain for gameover state');
 
-      // Apply volatility scalar to make changes more dramatic
-      const scaledPriceChange = priceChangePercent * volatilityScalar * 50;
+      // Move all boxes far away from the player's view
+      const clearedBoxes = boxes.map((box) => ({
+        ...box,
+        position: [box.position[0], box.position[1], -depth * 10] as [
+          number,
+          number,
+          number,
+        ],
+      }));
 
-      // Scale the height multiplier based on price change
-      // Small changes will have minimal effect
-      // Medium changes will have moderate effect
-      // Large changes will have significant effect
-      if (scaledPriceChange > 2.5) {
-        // Large price change
-        heightMultiplierRef.current = 1.5 + Math.min(scaledPriceChange, 10);
-        console.log(
-          `Large price change: ${priceChangePercent}% -> Height multiplier: ${heightMultiplierRef.current}`,
-        );
-      } else if (scaledPriceChange > 0.5) {
-        // Medium price change
-        heightMultiplierRef.current = 1.2 + scaledPriceChange * 0.6;
-        console.log(
-          `Medium price change: ${priceChangePercent}% -> Height multiplier: ${heightMultiplierRef.current}`,
-        );
-      } else {
-        // Small price change
-        heightMultiplierRef.current = 1 + scaledPriceChange * 2;
-        console.log(
-          `Small price change: ${priceChangePercent}% -> Height multiplier: ${heightMultiplierRef.current}`,
-        );
-      }
-
-      // Store the current price for future reference
-      lastPriceRef.current = priceData.price;
+      setBoxes(clearedBoxes);
     }
-  }, [priceData, volatilityScalar]);
-
-  // Reset terrain when game state changes from 'gameover' to 'playing'
-  useEffect(() => {
-    // Only reset when transitioning from gameover to playing
-    if (prevGameStateRef.current === 'gameover' && gameState === 'playing') {
-      console.log('Resetting terrain from gameover to playing state');
+    // Reset terrain when transitioning from gameover to playing
+    // or when the game state is set to playing after being in gameover
+    else if (
+      (prevGameStateRef.current === 'gameover' && gameState === 'playing') ||
+      (gameState === 'playing' &&
+        boxes.length > 0 &&
+        boxes[0].position[2] < -depth)
+    ) {
+      console.log('Resetting terrain for playing state');
 
       // Reset height multiplier
       heightMultiplierRef.current = 1;
@@ -165,7 +149,45 @@ const EndlessTerrain = ({
 
     // Update previous game state
     prevGameStateRef.current = gameState;
-  }, [gameState, width, depth, boxCount]);
+  }, [gameState, width, depth, boxCount, boxes]);
+
+  // Update height multiplier when price data changes
+  useEffect(() => {
+    if (priceData && priceData.previousPrice) {
+      // Calculate absolute price change percentage
+      const priceChangePercent = Math.abs(priceData.priceChangePercent);
+
+      // Apply volatility scalar to make changes more dramatic
+      const scaledPriceChange = priceChangePercent * volatilityScalar * 50;
+
+      // Scale the height multiplier based on price change
+      // Small changes will have minimal effect
+      // Medium changes will have moderate effect
+      // Large changes will have significant effect
+      if (scaledPriceChange > 2.5) {
+        // Large price change
+        heightMultiplierRef.current = 1.5 + Math.min(scaledPriceChange, 10);
+        console.log(
+          `Large price change: ${priceChangePercent}% -> Height multiplier: ${heightMultiplierRef.current}`,
+        );
+      } else if (scaledPriceChange > 0.5) {
+        // Medium price change
+        heightMultiplierRef.current = 1.2 + scaledPriceChange * 0.6;
+        console.log(
+          `Medium price change: ${priceChangePercent}% -> Height multiplier: ${heightMultiplierRef.current}`,
+        );
+      } else {
+        // Small price change
+        heightMultiplierRef.current = 1 + scaledPriceChange * 2;
+        console.log(
+          `Small price change: ${priceChangePercent}% -> Height multiplier: ${heightMultiplierRef.current}`,
+        );
+      }
+
+      // Store the current price for future reference
+      lastPriceRef.current = priceData.price;
+    }
+  }, [priceData, volatilityScalar]);
 
   // Generate initial boxes with random heights, sizes, and colors
   useMemo(() => {
