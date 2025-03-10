@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { HermesClient } from '@pythnetwork/hermes-client';
 
+// Add type definitions for missing types
+type TimeoutRef = ReturnType<typeof setTimeout> | null;
+
 // Interface for price data
 export interface PriceData {
   price: number;
@@ -11,7 +14,14 @@ export interface PriceData {
 }
 
 interface PriceDataProviderProps {
-  onPriceUpdate: (priceData: PriceData) => void;
+  onPriceUpdate: (newPriceData: PriceData) => void;
+}
+
+// Define a custom EventSource type that matches what we need
+interface CustomEventSource {
+  close: () => void;
+  onmessage: ((event: MessageEvent<any>) => void) | null;
+  onerror: ((event: Event) => void) | null;
 }
 
 const PriceDataProvider: React.FC<PriceDataProviderProps> = ({
@@ -19,10 +29,10 @@ const PriceDataProvider: React.FC<PriceDataProviderProps> = ({
 }) => {
   const [error, setError] = useState<string | null>(null);
   const connectionRef = useRef<HermesClient | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const eventSourceRef = useRef<CustomEventSource | null>(null);
   const previousPriceRef = useRef<number | null>(null);
   const isConnectingRef = useRef<boolean>(false);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<TimeoutRef>(null);
   const reconnectAttemptsRef = useRef<number>(0);
   const MAX_RECONNECT_ATTEMPTS = 3;
 
@@ -55,8 +65,9 @@ const PriceDataProvider: React.FC<PriceDataProviderProps> = ({
       console.log('Establishing connection to price feed...');
 
       // Start streaming price updates
-      eventSourceRef.current =
+      const eventSource =
         await connectionRef.current.getPriceUpdatesStream(priceIds);
+      eventSourceRef.current = eventSource as unknown as CustomEventSource;
 
       // Reset error state on successful connection
       if (error) {
@@ -67,86 +78,88 @@ const PriceDataProvider: React.FC<PriceDataProviderProps> = ({
       reconnectAttemptsRef.current = 0;
 
       // Set up message handler
-      eventSourceRef.current.onmessage = (event: MessageEvent) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.parsed && data.parsed.length > 0) {
-            const priceInfo = data.parsed[0].price;
+      if (eventSourceRef.current) {
+        eventSourceRef.current.onmessage = (event: MessageEvent) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.parsed && data.parsed.length > 0) {
+              const priceInfo = data.parsed[0].price;
 
-            // Convert price to a number with proper decimal places
-            const currentPrice =
-              Number(priceInfo.price) * Math.pow(10, priceInfo.expo);
+              // Convert price to a number with proper decimal places
+              const currentPrice =
+                Number(priceInfo.price) * Math.pow(10, priceInfo.expo);
 
-            // Calculate price change
-            let priceChange = 0;
-            let priceChangePercent = 0;
+              // Calculate price change
+              let priceChange = 0;
+              let priceChangePercent = 0;
 
-            if (previousPriceRef.current !== null) {
-              priceChange = currentPrice - previousPriceRef.current;
-              priceChangePercent =
-                (priceChange / previousPriceRef.current) * 100;
+              if (previousPriceRef.current !== null) {
+                priceChange = currentPrice - previousPriceRef.current;
+                priceChangePercent =
+                  (priceChange / previousPriceRef.current) * 100;
+              }
+
+              const newPriceData: PriceData = {
+                price: currentPrice,
+                previousPrice: previousPriceRef.current || currentPrice,
+                priceChange,
+                priceChangePercent,
+                lastUpdateTime: priceInfo.publish_time,
+              };
+
+              // Update previous price for next calculation
+              previousPriceRef.current = currentPrice;
+
+              // Call the callback with the price data
+              onPriceUpdate(newPriceData);
+            }
+          } catch (err) {
+            console.error('Error parsing price data:', err);
+          }
+        };
+
+        // Set up error handler
+        eventSourceRef.current.onerror = (err: Event) => {
+          console.error('Error receiving updates:', err);
+
+          // Only set error if we don't already have one
+          if (!error) {
+            setError('Failed to connect to price feed');
+          }
+
+          // Close the current connection
+          if (eventSourceRef.current) {
+            eventSourceRef.current.close();
+            eventSourceRef.current = null;
+          }
+
+          // Attempt to reconnect with exponential backoff
+          if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+            const reconnectDelay = Math.min(
+              1000 * Math.pow(2, reconnectAttemptsRef.current),
+              10000,
+            );
+            console.log(
+              `Attempting to reconnect in ${reconnectDelay / 1000} seconds...`,
+            );
+
+            // Clear any existing timeout
+            if (reconnectTimeoutRef.current) {
+              clearTimeout(reconnectTimeoutRef.current);
             }
 
-            const priceData: PriceData = {
-              price: currentPrice,
-              previousPrice: previousPriceRef.current || currentPrice,
-              priceChange,
-              priceChangePercent,
-              lastUpdateTime: priceInfo.publish_time,
-            };
-
-            // Update previous price for next calculation
-            previousPriceRef.current = currentPrice;
-
-            // Call the callback with the price data
-            onPriceUpdate(priceData);
+            reconnectTimeoutRef.current = setTimeout(() => {
+              reconnectAttemptsRef.current += 1;
+              isConnectingRef.current = false;
+              establishConnection();
+            }, reconnectDelay);
+          } else {
+            console.warn(
+              `Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Stopping reconnection attempts.`,
+            );
           }
-        } catch (err) {
-          console.error('Error parsing price data:', err);
-        }
-      };
-
-      // Set up error handler
-      eventSourceRef.current.onerror = (err: Event) => {
-        console.error('Error receiving updates:', err);
-
-        // Only set error if we don't already have one
-        if (!error) {
-          setError('Failed to connect to price feed');
-        }
-
-        // Close the current connection
-        if (eventSourceRef.current) {
-          eventSourceRef.current.close();
-          eventSourceRef.current = null;
-        }
-
-        // Attempt to reconnect with exponential backoff
-        if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-          const reconnectDelay = Math.min(
-            1000 * Math.pow(2, reconnectAttemptsRef.current),
-            10000,
-          );
-          console.log(
-            `Attempting to reconnect in ${reconnectDelay / 1000} seconds...`,
-          );
-
-          // Clear any existing timeout
-          if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-          }
-
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectAttemptsRef.current += 1;
-            isConnectingRef.current = false;
-            establishConnection();
-          }, reconnectDelay);
-        } else {
-          console.warn(
-            `Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Stopping reconnection attempts.`,
-          );
-        }
-      };
+        };
+      }
 
       console.log('Connection to price feed established successfully');
     } catch (err) {

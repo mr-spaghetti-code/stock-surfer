@@ -13,8 +13,21 @@ import Explosion from './components/Explosion';
 import PriceDataProvider, { PriceData } from './components/PriceFeed';
 import { useControls } from 'leva';
 import { Canvas } from '@react-three/fiber';
-import { Suspense, useState, KeyboardEvent, useRef, useEffect } from 'react';
+import {
+  Suspense,
+  useState,
+  KeyboardEvent,
+  useRef,
+  useEffect,
+  useCallback,
+} from 'react';
 import * as THREE from 'three';
+import {
+  VolatilityData,
+  initVolatilityData,
+  updateVolatilityData,
+  calculateDifficultyMultiplier,
+} from './utils/priceUtils';
 
 useGLTF.preload('/models/ship.gltf');
 
@@ -29,6 +42,15 @@ const GameScene = () => {
 
   // Price data state
   const [priceData, setPriceData] = useState<PriceData | null>(null);
+  const [volatilityData, setVolatilityData] = useState<VolatilityData>(
+    initVolatilityData(),
+  );
+  const [difficultyMultiplier, setDifficultyMultiplier] = useState(1.0);
+  const [readyToStart, setReadyToStart] = useState(false);
+  const requiredPriceSamples = 15;
+
+  // Use refs to prevent circular dependencies in useEffect
+  const volatilityDataRef = useRef<VolatilityData>(initVolatilityData());
 
   // Explosion state
   const [showExplosion, setShowExplosion] = useState(false);
@@ -67,8 +89,60 @@ const GameScene = () => {
     terrainDepth: { value: 120, min: 50, max: 200, step: 10 },
   });
 
+  // Difficulty controls
+  const { baseDifficulty, maxDifficultyMultiplier } = useControls(
+    'Difficulty',
+    {
+      baseDifficulty: { value: 1.0, min: 0.5, max: 2.0, step: 0.1 },
+      maxDifficultyMultiplier: { value: 2.0, min: 1.0, max: 3.0, step: 0.1 },
+    },
+  );
+
   // Toggle for orbit controls (for debugging)
   const [useOrbitControls, setUseOrbitControls] = useState(false);
+
+  // Memoized function to update difficulty
+  const updateDifficulty = useCallback(
+    (volatilityValue: number) => {
+      const newDifficultyMultiplier = calculateDifficultyMultiplier(
+        volatilityValue,
+        baseDifficulty,
+        maxDifficultyMultiplier,
+      );
+      setDifficultyMultiplier(newDifficultyMultiplier);
+    },
+    [baseDifficulty, maxDifficultyMultiplier],
+  );
+
+  // Update volatility data when price changes
+  useEffect(() => {
+    if (priceData) {
+      // Use the ref value to avoid dependency on volatilityData state
+      const updatedVolatilityData = updateVolatilityData(
+        volatilityDataRef.current,
+        priceData.price,
+        requiredPriceSamples,
+      );
+
+      // Update the ref first
+      volatilityDataRef.current = updatedVolatilityData;
+
+      // Then update the state (this won't trigger another effect run)
+      setVolatilityData(updatedVolatilityData);
+
+      // Update difficulty multiplier based on volatility
+      updateDifficulty(updatedVolatilityData.volatility);
+
+      // Set readyToStart when we have enough price samples
+      if (updatedVolatilityData.isReady && !readyToStart) {
+        setReadyToStart(true);
+      }
+    }
+  }, [priceData, requiredPriceSamples, readyToStart, updateDifficulty]);
+
+  // Calculate effective game speed based on difficulty multiplier
+  const effectiveTerrainSpeed =
+    terrainSpeed * (gameState === 'playing' ? difficultyMultiplier : 0);
 
   // Update score based on time played
   useEffect(() => {
@@ -84,8 +158,11 @@ const GameScene = () => {
 
         // Update score based on time and terrain speed
         if (deltaTime > 0) {
-          // Increment score based on terrain speed (faster speed = higher score rate)
-          const scoreIncrement = Math.floor((terrainSpeed * deltaTime) / 100);
+          // Increment score based on terrain speed and difficulty multiplier
+          // Higher difficulty = higher score potential
+          const scoreIncrement = Math.floor(
+            (effectiveTerrainSpeed * deltaTime) / 100,
+          );
           scoreRef.current += scoreIncrement;
           setScore(scoreRef.current);
         }
@@ -105,7 +182,7 @@ const GameScene = () => {
         globalThis.window.cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [gameState, terrainSpeed]);
+  }, [gameState, effectiveTerrainSpeed]);
 
   // Handle price updates
   const handlePriceUpdate = (newPriceData: PriceData) => {
@@ -114,18 +191,24 @@ const GameScene = () => {
 
   // Game control functions
   const handleStartGame = () => {
-    setGameState('playing');
-    scoreRef.current = 0;
-    setScore(0);
-    lastUpdateTimeRef.current = Date.now();
+    // Only allow starting if we have enough price data
+    if (readyToStart) {
+      setGameState('playing');
+      scoreRef.current = 0;
+      setScore(0);
+      lastUpdateTimeRef.current = Date.now();
+    }
   };
 
   const handleRestartGame = () => {
-    setShowExplosion(false);
-    setGameState('playing');
-    scoreRef.current = 0;
-    setScore(0);
-    lastUpdateTimeRef.current = Date.now();
+    // Only allow restarting if we have enough price data
+    if (readyToStart) {
+      setShowExplosion(false);
+      setGameState('playing');
+      scoreRef.current = 0;
+      setScore(0);
+      lastUpdateTimeRef.current = Date.now();
+    }
   };
 
   const handleCollision = () => {
@@ -191,7 +274,7 @@ const GameScene = () => {
           gravity={gameState === 'start' ? [0, 0, 0] : [0, -9.8, 0]}
         >
           <EndlessTerrain
-            speed={gameState === 'playing' ? terrainSpeed : 0}
+            speed={effectiveTerrainSpeed}
             boxCount={boxCount}
             depth={terrainDepth}
           />
@@ -224,6 +307,10 @@ const GameScene = () => {
             onStartGame={handleStartGame}
             onRestartGame={handleRestartGame}
             priceData={priceData}
+            volatilityData={volatilityData}
+            difficultyMultiplier={difficultyMultiplier}
+            readyToStart={readyToStart}
+            requiredSamples={requiredPriceSamples}
           />
         </Suspense>
 

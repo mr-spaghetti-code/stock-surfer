@@ -3,6 +3,7 @@ import { useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import PriceDisplay from './PriceDisplay';
 import { PriceData } from './PriceFeed';
+import { VolatilityData } from '../utils/priceUtils';
 
 interface GameUIProps {
   gameState: 'start' | 'playing' | 'gameover';
@@ -10,6 +11,10 @@ interface GameUIProps {
   onStartGame: () => void;
   onRestartGame: () => void;
   priceData: PriceData | null;
+  volatilityData: VolatilityData;
+  difficultyMultiplier: number;
+  readyToStart: boolean;
+  requiredSamples: number;
 }
 
 const GameUI = ({
@@ -18,24 +23,26 @@ const GameUI = ({
   onStartGame,
   onRestartGame,
   priceData,
+  volatilityData,
+  difficultyMultiplier,
+  readyToStart,
+  requiredSamples,
 }: GameUIProps) => {
   const { viewport } = useThree();
-  const [spacePressed, setSpacePressed] = useState(false);
 
   // Handle keyboard events
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && gameState === 'start') {
-        setSpacePressed(true);
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.code === 'Space' && gameState === 'start' && readyToStart) {
         onStartGame();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    globalThis.window.addEventListener('keydown', handleKeyDown);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      globalThis.window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [gameState, onStartGame]);
+  }, [gameState, onStartGame, readyToStart]);
 
   // Start screen
   if (gameState === 'start') {
@@ -50,16 +57,52 @@ const GameUI = ({
         >
           SPACE SURFER
         </Text>
+
+        {readyToStart ? (
+          <Text
+            position={[0, 0, 0]}
+            fontSize={0.5}
+            color="#ffffff"
+            anchorX="center"
+            anchorY="middle"
+          >
+            Press SPACE to start
+          </Text>
+        ) : (
+          <Text
+            position={[0, 0, 0]}
+            fontSize={0.5}
+            color="#aaaaaa"
+            anchorX="center"
+            anchorY="middle"
+          >
+            Collecting price data... ({volatilityData.priceHistory.length}/
+            {requiredSamples})
+          </Text>
+        )}
+
+        {/* Display difficulty info */}
         <Text
-          position={[0, 0, 0]}
-          fontSize={0.5}
-          color="#ffffff"
+          position={[0, -1, 0]}
+          fontSize={0.3}
+          color="#ffaa00"
           anchorX="center"
           anchorY="middle"
         >
-          Press SPACE to start
+          Difficulty: {difficultyMultiplier.toFixed(2)}x
         </Text>
-        <PriceDisplay priceData={priceData} />
+
+        <Text
+          position={[0, -1.5, 0]}
+          fontSize={0.3}
+          color="#ffaa00"
+          anchorX="center"
+          anchorY="middle"
+        >
+          Market Volatility: {(volatilityData.volatility * 100).toFixed(1)}%
+        </Text>
+
+        <PriceDisplay priceData={priceData} volatilityData={volatilityData} />
       </group>
     );
   }
@@ -86,6 +129,15 @@ const GameUI = ({
         >
           Final Score: {score}
         </Text>
+        <Text
+          position={[0, -0.2, 0]}
+          fontSize={0.3}
+          color="#ffaa00"
+          anchorX="center"
+          anchorY="middle"
+        >
+          Difficulty: {difficultyMultiplier.toFixed(2)}x
+        </Text>
         <group position={[0, -1, 0]} onClick={onRestartGame}>
           <mesh>
             <planeGeometry args={[3, 1]} />
@@ -101,12 +153,12 @@ const GameUI = ({
             Try Again
           </Text>
         </group>
-        <PriceDisplay priceData={priceData} />
+        <PriceDisplay priceData={priceData} volatilityData={volatilityData} />
       </group>
     );
   }
 
-  // In-game UI (score)
+  // In-game UI (score and difficulty)
   return (
     <>
       <Text
@@ -118,7 +170,16 @@ const GameUI = ({
       >
         Score: {score}
       </Text>
-      <PriceDisplay priceData={priceData} />
+      <Text
+        position={[-viewport.width / 2 + 2, viewport.height / 2 - 1.8, 0]}
+        fontSize={0.3}
+        color="#ffaa00"
+        anchorX="left"
+        anchorY="top"
+      >
+        Difficulty: {difficultyMultiplier.toFixed(2)}x
+      </Text>
+      <PriceDisplay priceData={priceData} volatilityData={volatilityData} />
     </>
   );
 };
