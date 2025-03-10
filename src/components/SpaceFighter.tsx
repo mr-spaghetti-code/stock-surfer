@@ -5,6 +5,9 @@ import * as THREE from 'three';
 import { GLTF } from 'three-stdlib';
 import { RigidBody } from '@react-three/rapier';
 
+// Import the actual RigidBody type from Rapier
+import { RapierRigidBody } from '@react-three/rapier';
+
 // Define the type for our GLTF result
 type GLTFResult = GLTF & {
   nodes: {
@@ -21,7 +24,7 @@ interface SpaceFighterProps {
   scale?: number;
   gameState: 'start' | 'playing' | 'gameover';
   onCollision: () => void;
-  onPositionUpdate: (pos: [number, number, number]) => void;
+  onPositionUpdate: (position: [number, number, number]) => void;
 }
 
 const SpaceFighter = ({
@@ -37,7 +40,7 @@ const SpaceFighter = ({
   const { nodes, materials } = gltf as unknown as GLTFResult;
 
   // Create a reference to the RigidBody
-  const rigidBodyRef = useRef<any>(null);
+  const rigidBodyRef = useRef<RapierRigidBody>(null);
 
   // State to track key presses
   const [isSpacePressed, setIsSpacePressed] = useState(false);
@@ -124,52 +127,56 @@ const SpaceFighter = ({
 
   // Apply forces using Rapier physics
   useFrame(() => {
-    if (!rigidBodyRef.current || gameState !== 'playing') return;
+    if (rigidBodyRef.current && gameState === 'playing') {
+      const body = rigidBodyRef.current;
+      const currentPosition = body.translation();
 
-    const body = rigidBodyRef.current;
-    const currentPosition = body.translation();
+      // Update parent component with current position for explosion effect
+      onPositionUpdate([
+        currentPosition.x,
+        currentPosition.y,
+        currentPosition.z,
+      ]);
 
-    // Update parent component with current position for explosion effect
-    onPositionUpdate([currentPosition.x, currentPosition.y, currentPosition.z]);
+      // Apply vertical thrust
+      if (isSpacePressed) {
+        body.applyImpulse({ x: 0, y: THRUST_FORCE, z: 0 }, true);
+      }
 
-    // Apply vertical thrust
-    if (isSpacePressed) {
-      body.applyImpulse({ x: 0, y: THRUST_FORCE, z: 0 }, true);
+      // Apply horizontal movement
+      if (isLeftPressed && currentPosition.x > -MAX_X) {
+        body.applyImpulse({ x: -LATERAL_FORCE, y: 0, z: 0 }, true);
+      }
+      if (isRightPressed && currentPosition.x < MAX_X) {
+        body.applyImpulse({ x: LATERAL_FORCE, y: 0, z: 0 }, true);
+      }
+
+      // Apply vertical movement
+      if (isUpPressed && currentPosition.y < MAX_Y) {
+        body.applyImpulse({ x: 0, y: LATERAL_FORCE, z: 0 }, true);
+      }
+      if (isDownPressed && currentPosition.y > -MAX_Y) {
+        body.applyImpulse({ x: 0, y: -LATERAL_FORCE, z: 0 }, true);
+      }
+
+      // Keep the ship at a fixed Z position
+      body.setTranslation(
+        { x: currentPosition.x, y: currentPosition.y, z: 0 },
+        true,
+      );
+
+      // Add a slight tilt based on horizontal movement
+      const velocity = body.linvel();
+      const tiltFactor = 0.2;
+      body.setRotation(
+        {
+          x: rotation[0],
+          y: rotation[1],
+          z: rotation[2] - velocity.x * tiltFactor,
+        },
+        true,
+      );
     }
-
-    // Apply horizontal movement
-    if (isLeftPressed && currentPosition.x > -MAX_X) {
-      body.applyImpulse({ x: -LATERAL_FORCE, y: 0, z: 0 }, true);
-    }
-    if (isRightPressed && currentPosition.x < MAX_X) {
-      body.applyImpulse({ x: LATERAL_FORCE, y: 0, z: 0 }, true);
-    }
-
-    // Apply vertical movement
-    if (isUpPressed && currentPosition.y < MAX_Y) {
-      body.applyImpulse({ x: 0, y: LATERAL_FORCE, z: 0 }, true);
-    }
-    if (isDownPressed && currentPosition.y > -MAX_Y) {
-      body.applyImpulse({ x: 0, y: -LATERAL_FORCE, z: 0 }, true);
-    }
-
-    // Keep the ship at a fixed Z position
-    body.setTranslation(
-      { x: currentPosition.x, y: currentPosition.y, z: 0 },
-      true,
-    );
-
-    // Add a slight tilt based on horizontal movement
-    const velocity = body.linvel();
-    const tiltFactor = 0.2;
-    body.setRotation(
-      {
-        x: rotation[0],
-        y: rotation[1],
-        z: rotation[2] - velocity.x * tiltFactor,
-      },
-      true,
-    );
   });
 
   return (
@@ -183,7 +190,6 @@ const SpaceFighter = ({
       angularDamping={0.95}
       sensor
       onIntersectionEnter={onCollision}
-      enabled={gameState === 'playing'}
     >
       <mesh
         geometry={nodes.model.geometry}

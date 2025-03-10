@@ -1,13 +1,16 @@
-import { useRef, useMemo, useState } from 'react';
+import { useRef, useMemo, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RigidBody } from '@react-three/rapier';
 import * as THREE from 'three';
+import { PriceData } from '../components/PriceFeed';
 
 interface EndlessTerrainProps {
   width?: number;
   depth?: number;
   boxCount?: number;
   speed?: number;
+  priceData?: PriceData | null;
+  volatilityScalar?: number;
 }
 
 interface BoxData {
@@ -23,12 +26,54 @@ const EndlessTerrain = ({
   depth = 100,
   boxCount = 100,
   speed = 10,
+  priceData = null,
+  volatilityScalar = 5.0, // Default volatility scalar - higher values = more dramatic height changes
 }: EndlessTerrainProps) => {
   const terrainRef = useRef<THREE.Group>(null);
   const boxRefs = useRef<(THREE.Mesh | null)[]>([]);
   const [boxes, setBoxes] = useState<BoxData[]>([]);
+  const lastPriceRef = useRef<number | null>(null);
+  const heightMultiplierRef = useRef<number>(1);
 
-  // Generate boxes with random heights, sizes, and colors
+  // Update height multiplier when price data changes
+  useEffect(() => {
+    if (priceData && priceData.previousPrice) {
+      // Calculate absolute price change percentage
+      const priceChangePercent = Math.abs(priceData.priceChangePercent);
+
+      // Apply volatility scalar to make changes more dramatic
+      const scaledPriceChange = priceChangePercent * volatilityScalar * 50;
+
+      // Scale the height multiplier based on price change
+      // Small changes will have minimal effect
+      // Medium changes will have moderate effect
+      // Large changes will have significant effect
+      if (scaledPriceChange > 2.5) {
+        // Large price change
+        heightMultiplierRef.current = 1.5 + Math.min(scaledPriceChange, 10);
+        console.log(
+          `Large price change: ${priceChangePercent}% -> Height multiplier: ${heightMultiplierRef.current}`,
+        );
+      } else if (scaledPriceChange > 0.5) {
+        // Medium price change
+        heightMultiplierRef.current = 1.2 + scaledPriceChange * 0.6;
+        console.log(
+          `Medium price change: ${priceChangePercent}% -> Height multiplier: ${heightMultiplierRef.current}`,
+        );
+      } else {
+        // Small price change
+        heightMultiplierRef.current = 1 + scaledPriceChange * 2;
+        console.log(
+          `Small price change: ${priceChangePercent}% -> Height multiplier: ${heightMultiplierRef.current}`,
+        );
+      }
+
+      // Store the current price for future reference
+      lastPriceRef.current = priceData.price;
+    }
+  }, [priceData, volatilityScalar]);
+
+  // Generate initial boxes with random heights, sizes, and colors
   useMemo(() => {
     const items: BoxData[] = [];
     const halfWidth = width / 2;
@@ -100,9 +145,20 @@ const EndlessTerrain = ({
       if (newZ > depth / 2) {
         // Randomize X position when recycling to create more variety
         const newX = Math.random() * width - width / 2;
+
+        // Apply height multiplier based on price changes when recycling
+        const baseHeight = Math.random() * 5 + 0.5;
+        const height = baseHeight * heightMultiplierRef.current;
+
+        // Update box with new position and height
         updatedBoxes[index] = {
           ...box,
-          position: [newX, box.position[1], newZ - depth] as [
+          position: [newX, -8 + height / 2, newZ - depth] as [
+            number,
+            number,
+            number,
+          ],
+          scale: [box.scale[0], height, box.scale[2]] as [
             number,
             number,
             number,

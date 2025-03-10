@@ -277,6 +277,8 @@ const GameScene = () => {
             speed={effectiveTerrainSpeed}
             boxCount={boxCount}
             depth={terrainDepth}
+            priceData={priceData}
+            volatilityScalar={10.0}
           />
           <Suspense fallback={null}>
             {/* Only show the ship if not showing explosion or not in gameover state */}
