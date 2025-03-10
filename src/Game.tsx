@@ -9,6 +9,7 @@ import {
 import SpaceFighter from './components/SpaceFighter';
 import EndlessTerrain from './components/EndlessTerrain';
 import GameUI from './components/GameUI';
+import Explosion from './components/Explosion';
 import { useControls } from 'leva';
 import { Canvas } from '@react-three/fiber';
 import { Suspense, useState, KeyboardEvent, useRef, useEffect } from 'react';
@@ -24,6 +25,13 @@ const GameScene = () => {
   const [score, setScore] = useState(0);
   const scoreRef = useRef(0);
   const lastUpdateTimeRef = useRef(0);
+
+  // Explosion state
+  const [showExplosion, setShowExplosion] = useState(false);
+  const [explosionPosition, setExplosionPosition] = useState<
+    [number, number, number]
+  >([0, 0, 0]);
+  const shipPositionRef = useRef<[number, number, number]>([0, 0, 0]);
 
   // Environment controls
   const { intensity, fogDensity } = useControls('Environment', {
@@ -74,15 +82,15 @@ const GameScene = () => {
         }
 
         lastUpdateTimeRef.current = now;
-        requestAnimationFrame(updateScore);
+        globalThis.window.requestAnimationFrame(updateScore);
       }
     };
 
     lastUpdateTimeRef.current = Date.now();
-    const animationId = requestAnimationFrame(updateScore);
+    const animationId = globalThis.window.requestAnimationFrame(updateScore);
 
     return () => {
-      cancelAnimationFrame(animationId);
+      globalThis.window.cancelAnimationFrame(animationId);
     };
   }, [gameState, terrainSpeed]);
 
@@ -95,6 +103,7 @@ const GameScene = () => {
   };
 
   const handleRestartGame = () => {
+    setShowExplosion(false);
     setGameState('playing');
     scoreRef.current = 0;
     setScore(0);
@@ -103,8 +112,19 @@ const GameScene = () => {
 
   const handleCollision = () => {
     if (gameState === 'playing') {
+      // Show explosion at the ship's current position
+      setExplosionPosition(shipPositionRef.current);
+      setShowExplosion(true);
       setGameState('gameover');
     }
+  };
+
+  const handleExplosionComplete = () => {
+    // Optional: You can add additional logic here after the explosion animation completes
+  };
+
+  const updateShipPosition = (position: [number, number, number]) => {
+    shipPositionRef.current = position;
   };
 
   // Toggle orbit controls with 'O' key
@@ -144,20 +164,36 @@ const GameScene = () => {
           far={1000}
         />
 
-        <Physics debug={false} timeStep="vary" gravity={[0, -9.8, 0]}>
+        <Physics
+          debug={false}
+          timeStep="vary"
+          gravity={gameState === 'start' ? [0, 0, 0] : [0, -9.8, 0]}
+        >
           <EndlessTerrain
             speed={gameState === 'playing' ? terrainSpeed : 0}
             boxCount={boxCount}
             depth={terrainDepth}
           />
           <Suspense fallback={null}>
-            <SpaceFighter
-              rotation={[rotationX, rotationY, rotationZ]}
-              gameState={gameState}
-              onCollision={handleCollision}
-            />
+            {/* Only show the ship if not showing explosion or not in gameover state */}
+            {(!showExplosion || gameState !== 'gameover') && (
+              <SpaceFighter
+                rotation={[rotationX, rotationY, rotationZ]}
+                gameState={gameState}
+                onCollision={handleCollision}
+                onPositionUpdate={updateShipPosition}
+              />
+            )}
           </Suspense>
         </Physics>
+
+        {/* Explosion effect */}
+        {showExplosion && (
+          <Explosion
+            position={explosionPosition}
+            onComplete={handleExplosionComplete}
+          />
+        )}
 
         {/* Game UI */}
         <Suspense fallback={null}>

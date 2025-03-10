@@ -21,6 +21,7 @@ interface SpaceFighterProps {
   scale?: number;
   gameState: 'start' | 'playing' | 'gameover';
   onCollision: () => void;
+  onPositionUpdate: (position: [number, number, number]) => void;
 }
 
 const SpaceFighter = ({
@@ -29,36 +30,14 @@ const SpaceFighter = ({
   scale = 1,
   gameState,
   onCollision,
+  onPositionUpdate,
 }: SpaceFighterProps) => {
   // Load the ship model
   const gltf = useGLTF('/models/ship.gltf');
   const { nodes, materials } = gltf as unknown as GLTFResult;
 
   // Create a reference to the RigidBody
-  const rigidBodyRef = useRef<{
-    setTranslation: (
-      translation: { x: number; y: number; z: number },
-      wakeUp?: boolean,
-    ) => void;
-    setLinvel: (
-      velocity: { x: number; y: number; z: number },
-      wakeUp?: boolean,
-    ) => void;
-    setAngvel: (
-      velocity: { x: number; y: number; z: number },
-      wakeUp?: boolean,
-    ) => void;
-    translation: () => { x: number; y: number; z: number };
-    linvel: () => { x: number; y: number; z: number };
-    setRotation: (
-      rotation: { x: number; y: number; z: number },
-      wakeUp?: boolean,
-    ) => void;
-    applyImpulse: (
-      impulse: { x: number; y: number; z: number },
-      wakeUp?: boolean,
-    ) => void;
-  }>(null);
+  const rigidBodyRef = useRef<any>(null);
 
   // State to track key presses
   const [isSpacePressed, setIsSpacePressed] = useState(false);
@@ -150,6 +129,9 @@ const SpaceFighter = ({
     const body = rigidBodyRef.current;
     const currentPosition = body.translation();
 
+    // Update parent component with current position for explosion effect
+    onPositionUpdate([currentPosition.x, currentPosition.y, currentPosition.z]);
+
     // Apply vertical thrust
     if (isSpacePressed) {
       body.applyImpulse({ x: 0, y: THRUST_FORCE, z: 0 }, true);
@@ -201,7 +183,7 @@ const SpaceFighter = ({
       angularDamping={0.95}
       sensor
       onIntersectionEnter={onCollision}
-      enabled={gameState === 'playing'}
+      active={gameState === 'playing'}
     >
       <mesh
         geometry={nodes.model.geometry}
