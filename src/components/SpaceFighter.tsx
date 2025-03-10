@@ -19,19 +19,46 @@ interface SpaceFighterProps {
   position?: [number, number, number];
   rotation?: [number, number, number];
   scale?: number;
+  gameState: 'start' | 'playing' | 'gameover';
+  onCollision: () => void;
 }
 
 const SpaceFighter = ({
   position = [0, 0, 0],
   rotation = [0, 0, 0],
   scale = 1,
+  gameState,
+  onCollision,
 }: SpaceFighterProps) => {
   // Load the ship model
   const gltf = useGLTF('/models/ship.gltf');
   const { nodes, materials } = gltf as unknown as GLTFResult;
 
   // Create a reference to the RigidBody
-  const rigidBodyRef = useRef<any>(null);
+  const rigidBodyRef = useRef<{
+    setTranslation: (
+      translation: { x: number; y: number; z: number },
+      wakeUp?: boolean,
+    ) => void;
+    setLinvel: (
+      velocity: { x: number; y: number; z: number },
+      wakeUp?: boolean,
+    ) => void;
+    setAngvel: (
+      velocity: { x: number; y: number; z: number },
+      wakeUp?: boolean,
+    ) => void;
+    translation: () => { x: number; y: number; z: number };
+    linvel: () => { x: number; y: number; z: number };
+    setRotation: (
+      rotation: { x: number; y: number; z: number },
+      wakeUp?: boolean,
+    ) => void;
+    applyImpulse: (
+      impulse: { x: number; y: number; z: number },
+      wakeUp?: boolean,
+    ) => void;
+  }>(null);
 
   // State to track key presses
   const [isSpacePressed, setIsSpacePressed] = useState(false);
@@ -49,6 +76,8 @@ const SpaceFighter = ({
   // Handle keyboard events
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (gameState !== 'playing') return;
+
       switch (e.code) {
         case 'Space':
           setIsSpacePressed(true);
@@ -103,11 +132,20 @@ const SpaceFighter = ({
       globalThis.window.removeEventListener('keydown', handleKeyDown);
       globalThis.window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [gameState]);
+
+  // Reset ship position when game state changes
+  useEffect(() => {
+    if (rigidBodyRef.current && gameState === 'playing') {
+      rigidBodyRef.current.setTranslation({ x: 0, y: 0, z: 0 }, true);
+      rigidBodyRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      rigidBodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    }
+  }, [gameState]);
 
   // Apply forces using Rapier physics
   useFrame(() => {
-    if (!rigidBodyRef.current) return;
+    if (!rigidBodyRef.current || gameState !== 'playing') return;
 
     const body = rigidBodyRef.current;
     const currentPosition = body.translation();
@@ -161,6 +199,9 @@ const SpaceFighter = ({
       mass={1}
       linearDamping={0.95}
       angularDamping={0.95}
+      sensor
+      onIntersectionEnter={onCollision}
+      enabled={gameState === 'playing'}
     >
       <mesh
         geometry={nodes.model.geometry}

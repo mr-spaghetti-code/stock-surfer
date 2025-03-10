@@ -8,14 +8,24 @@ import {
 } from '@react-three/drei';
 import SpaceFighter from './components/SpaceFighter';
 import EndlessTerrain from './components/EndlessTerrain';
+import GameUI from './components/GameUI';
 import { useControls } from 'leva';
 import { Canvas } from '@react-three/fiber';
-import { Suspense, useState, KeyboardEvent } from 'react';
+import { Suspense, useState, KeyboardEvent, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 
 useGLTF.preload('/models/ship.gltf');
 
 const GameScene = () => {
+  // Game state
+  const [gameState, setGameState] = useState<'start' | 'playing' | 'gameover'>(
+    'start',
+  );
+  const [score, setScore] = useState(0);
+  const scoreRef = useRef(0);
+  const lastUpdateTimeRef = useRef(0);
+
+  // Environment controls
   const { intensity, fogDensity } = useControls('Environment', {
     intensity: {
       value: 0.4,
@@ -31,12 +41,14 @@ const GameScene = () => {
     },
   });
 
+  // Ship rotation controls
   const { rotationX, rotationY, rotationZ } = useControls('Ship Rotation', {
     rotationX: { value: -Math.PI / 2, min: -Math.PI, max: Math.PI, step: 0.01 },
     rotationY: { value: Math.PI, min: -Math.PI, max: Math.PI, step: 0.01 },
     rotationZ: { value: 0, min: -Math.PI, max: Math.PI, step: 0.01 },
   });
 
+  // Terrain controls
   const { terrainSpeed, boxCount, terrainDepth } = useControls('Terrain', {
     terrainSpeed: { value: 15, min: 5, max: 30, step: 1 },
     boxCount: { value: 150, min: 50, max: 300, step: 10 },
@@ -45,6 +57,55 @@ const GameScene = () => {
 
   // Toggle for orbit controls (for debugging)
   const [useOrbitControls, setUseOrbitControls] = useState(false);
+
+  // Update score based on time played
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+
+    const updateScore = () => {
+      if (gameState === 'playing') {
+        const now = Date.now();
+        const deltaTime = now - lastUpdateTimeRef.current;
+
+        // Update score based on time and terrain speed
+        if (lastUpdateTimeRef.current > 0 && deltaTime > 0) {
+          scoreRef.current += Math.floor((terrainSpeed * deltaTime) / 1000);
+          setScore(scoreRef.current);
+        }
+
+        lastUpdateTimeRef.current = now;
+        requestAnimationFrame(updateScore);
+      }
+    };
+
+    lastUpdateTimeRef.current = Date.now();
+    const animationId = requestAnimationFrame(updateScore);
+
+    return () => {
+      cancelAnimationFrame(animationId);
+    };
+  }, [gameState, terrainSpeed]);
+
+  // Game control functions
+  const handleStartGame = () => {
+    setGameState('playing');
+    scoreRef.current = 0;
+    setScore(0);
+    lastUpdateTimeRef.current = Date.now();
+  };
+
+  const handleRestartGame = () => {
+    setGameState('playing');
+    scoreRef.current = 0;
+    setScore(0);
+    lastUpdateTimeRef.current = Date.now();
+  };
+
+  const handleCollision = () => {
+    if (gameState === 'playing') {
+      setGameState('gameover');
+    }
+  };
 
   // Toggle orbit controls with 'O' key
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -85,14 +146,28 @@ const GameScene = () => {
 
         <Physics debug={false} timeStep="vary" gravity={[0, -9.8, 0]}>
           <EndlessTerrain
-            speed={terrainSpeed}
+            speed={gameState === 'playing' ? terrainSpeed : 0}
             boxCount={boxCount}
             depth={terrainDepth}
           />
           <Suspense fallback={null}>
-            <SpaceFighter rotation={[rotationX, rotationY, rotationZ]} />
+            <SpaceFighter
+              rotation={[rotationX, rotationY, rotationZ]}
+              gameState={gameState}
+              onCollision={handleCollision}
+            />
           </Suspense>
         </Physics>
+
+        {/* Game UI */}
+        <Suspense fallback={null}>
+          <GameUI
+            gameState={gameState}
+            score={score}
+            onStartGame={handleStartGame}
+            onRestartGame={handleRestartGame}
+          />
+        </Suspense>
 
         {/* Optional orbit controls for debugging */}
         {useOrbitControls && (
