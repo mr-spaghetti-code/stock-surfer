@@ -10,6 +10,10 @@ import SpaceFighter from './components/SpaceFighter';
 import EndlessTerrain from './components/EndlessTerrain';
 import GameUI from './components/GameUI';
 import Explosion from './components/Explosion';
+import SkyboxSphere from './components/SkyboxSphere';
+import PsychedelicSphere from './components/PsychedelicSphere';
+import CyberpunkEffects from './components/CyberpunkEffects';
+import NeonGrid from './components/NeonGrid';
 import PriceDataProvider, { PriceData } from './components/PriceFeed';
 import { useControls } from 'leva';
 import { Canvas } from '@react-three/fiber';
@@ -259,6 +263,20 @@ const GameScene = () => {
         <fog attach="fog" args={['#050a30', 10, 100 * fogDensity]} />
         <Environment preset="night" />
 
+        {/* Psychedelic background sphere */}
+        <PsychedelicSphere
+          radius={500}
+          speed={0.3}
+          scale={1.5}
+          intensity={0.4}
+          color1="#ff00ff"
+          color2="#00ffff"
+          color3="#2200ff"
+        />
+
+        {/* Neon grid for cyberpunk aesthetic */}
+        <NeonGrid size={100} divisions={30} color="#00ffff" />
+
         {/* Main camera - positioned behind and above the ship */}
         <PerspectiveCamera
           makeDefault
@@ -327,6 +345,14 @@ const GameScene = () => {
         )}
 
         <Stats />
+
+        {/* Post-processing effects */}
+        <CyberpunkEffects
+          bloomIntensity={1.8}
+          noiseOpacity={0.12}
+          vignetteIntensity={0.6}
+          chromaticAberrationOffset={0.001}
+        />
       </Canvas>
     </div>
   );

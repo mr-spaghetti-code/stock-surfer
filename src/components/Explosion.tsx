@@ -41,15 +41,15 @@ const Explosion = ({ position, onComplete }: ExplosionProps) => {
         Math.cos(phi) * speed,
       );
 
-      // Random color (orange/red/yellow for fire effect)
+      // Random color (cyberpunk colors for explosion effect)
       const colorChoice = Math.random();
       let color;
       if (colorChoice < 0.3) {
-        color = new THREE.Color(0xff5500); // Orange
+        color = new THREE.Color(0xff00ff); // Magenta
       } else if (colorChoice < 0.6) {
-        color = new THREE.Color(0xff0000); // Red
+        color = new THREE.Color(0x00ffff); // Cyan
       } else {
-        color = new THREE.Color(0xffcc00); // Yellow
+        color = new THREE.Color(0xff3366); // Neon pink
       }
 
       // Random scale
@@ -143,7 +143,8 @@ const Explosion = ({ position, onComplete }: ExplosionProps) => {
             transparent={true}
             opacity={1}
             emissive={particle.color}
-            emissiveIntensity={1}
+            emissiveIntensity={2}
+            toneMapped={false}
           />
         </mesh>
       ))}

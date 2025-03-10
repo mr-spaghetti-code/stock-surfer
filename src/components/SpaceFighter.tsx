@@ -24,7 +24,7 @@ interface SpaceFighterProps {
   scale?: number;
   gameState: 'start' | 'playing' | 'gameover';
   onCollision: () => void;
-  onPositionUpdate: (shipPosition: [number, number, number]) => void;
+  onPositionUpdate: (position: [number, number, number]) => void;
 }
 
 const SpaceFighter = ({
@@ -36,8 +36,7 @@ const SpaceFighter = ({
   onPositionUpdate,
 }: SpaceFighterProps) => {
   // Load the ship model
-  const gltf = useGLTF('/models/ship.gltf');
-  const { nodes, materials } = gltf as unknown as GLTFResult;
+  const { nodes, materials } = useGLTF('/models/ship.gltf') as GLTFResult;
 
   // Create a reference to the RigidBody
   const rigidBodyRef = useRef<RapierRigidBody>(null);
@@ -55,6 +54,20 @@ const SpaceFighter = ({
   const MAX_X = 15; // Maximum horizontal movement
   const MAX_Y = 10; // Maximum vertical movement
   const MIN_Y = -14; // Minimum vertical position (to prevent going below the floor)
+
+  // Enhance the material with cyberpunk effects
+  useEffect(() => {
+    if (materials.CustomMaterial) {
+      // Add neon glow effect
+      materials.CustomMaterial.emissive = new THREE.Color('#00ffff');
+      materials.CustomMaterial.emissiveIntensity = 0.5;
+      materials.CustomMaterial.toneMapped = false;
+
+      // Make it slightly metallic for a futuristic look
+      materials.CustomMaterial.metalness = 0.7;
+      materials.CustomMaterial.roughness = 0.2;
+    }
+  }, [materials]);
 
   // Handle keyboard events
   useEffect(() => {

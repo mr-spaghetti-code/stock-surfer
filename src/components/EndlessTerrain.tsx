@@ -1,6 +1,10 @@
 import { useRef, useMemo, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { RigidBody, CuboidCollider } from '@react-three/rapier';
+import {
+  RigidBody,
+  CuboidCollider,
+  RapierRigidBody,
+} from '@react-three/rapier';
 import * as THREE from 'three';
 import { PriceData } from '../components/PriceFeed';
 import { Grid } from '@react-three/drei';
@@ -25,6 +29,16 @@ interface BoxData {
   opacity?: number; // Add opacity property
 }
 
+// Add these cyberpunk color options
+const CYBERPUNK_COLORS = [
+  new THREE.Color('#ff00ff'), // Magenta
+  new THREE.Color('#00ffff'), // Cyan
+  new THREE.Color('#ff3366'), // Neon pink
+  new THREE.Color('#66ff33'), // Neon green
+  new THREE.Color('#3366ff'), // Neon blue
+  new THREE.Color('#ffff00'), // Yellow
+];
+
 const EndlessTerrain = ({
   width = 50,
   depth = 100,
@@ -37,7 +51,7 @@ const EndlessTerrain = ({
 }: EndlessTerrainProps) => {
   const terrainRef = useRef<THREE.Group>(null);
   const boxRefs = useRef<(THREE.Mesh | null)[]>([]);
-  const rigidBodyRefs = useRef<(THREE.Object3D | null)[]>([]);
+  const rigidBodyRefs = useRef<(RapierRigidBody | null)[]>([]);
   const floorRef = useRef<THREE.Mesh>(null);
   const gridRef = useRef<THREE.Group>(null);
   const [boxes, setBoxes] = useState<BoxData[]>([]);
@@ -89,15 +103,6 @@ const EndlessTerrain = ({
     const items: BoxData[] = [];
     const halfWidth = width / 2;
 
-    // Create a color palette for a more cohesive look
-    const colorPalette = [
-      new THREE.Color(0.1, 0.2, 0.4), // Dark blue
-      new THREE.Color(0.2, 0.3, 0.5), // Medium blue
-      new THREE.Color(0.3, 0.4, 0.6), // Light blue
-      new THREE.Color(0.2, 0.2, 0.3), // Dark slate
-      new THREE.Color(0.1, 0.1, 0.2), // Very dark blue
-    ];
-
     for (let i = 0; i < boxCount; i++) {
       // Vary the box size
       const boxWidth = Math.random() * 4 + 1; // Between 1 and 5
@@ -111,12 +116,12 @@ const EndlessTerrain = ({
       // Distribute boxes throughout the depth
       const z = Math.random() * depth - depth;
 
-      // Select a random color from our palette
-      const colorIndex = Math.floor(Math.random() * colorPalette.length);
-      const color = colorPalette[colorIndex];
+      // Use cyberpunk colors instead of random colors
+      const colorIndex = Math.floor(Math.random() * CYBERPUNK_COLORS.length);
+      const color = CYBERPUNK_COLORS[colorIndex].clone();
 
-      // Add some random variation to the color
-      const colorVariation = Math.random() * 0.1 - 0.05;
+      // Add slight variation to the color
+      const colorVariation = (Math.random() - 0.5) * 0.2;
       color.r += colorVariation;
       color.g += colorVariation;
       color.b += colorVariation;
@@ -284,11 +289,10 @@ const EndlessTerrain = ({
       {boxes.map((box, index) => (
         <RigidBody
           key={box.id}
-          ref={(el) => {
+          ref={(el: RapierRigidBody | null) => {
             if (el) {
               rigidBodyRefs.current[index] = el;
             }
-            return null;
           }}
           type="fixed"
           position={box.position}
@@ -300,7 +304,6 @@ const EndlessTerrain = ({
               if (el) {
                 boxRefs.current[index] = el;
               }
-              return null;
             }}
             castShadow
             receiveShadow
@@ -311,13 +314,15 @@ const EndlessTerrain = ({
                 if (el) {
                   materialRefs.current[index] = el;
                 }
-                return null;
               }}
               color={box.color}
               roughness={0.7}
               metalness={0.2}
-              transparent={box.opacity < 1.0}
-              opacity={box.opacity}
+              transparent={box.opacity !== undefined && box.opacity < 1.0}
+              opacity={box.opacity ?? 1.0}
+              emissive={box.color}
+              emissiveIntensity={0.5}
+              toneMapped={false}
             />
           </mesh>
           {/* Add explicit cuboid collider that matches the box dimensions */}
