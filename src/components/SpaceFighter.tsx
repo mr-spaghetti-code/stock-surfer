@@ -24,7 +24,7 @@ interface SpaceFighterProps {
   scale?: number;
   gameState: 'start' | 'playing' | 'gameover';
   onCollision: () => void;
-  onPositionUpdate: (position: [number, number, number]) => void;
+  onPositionUpdate: (shipPosition: [number, number, number]) => void;
 }
 
 const SpaceFighter = ({
@@ -54,6 +54,7 @@ const SpaceFighter = ({
   const LATERAL_FORCE = 0.5;
   const MAX_X = 15; // Maximum horizontal movement
   const MAX_Y = 10; // Maximum vertical movement
+  const MIN_Y = -14; // Minimum vertical position (to prevent going below the floor)
 
   // Handle keyboard events
   useEffect(() => {
@@ -159,21 +160,22 @@ const SpaceFighter = ({
         body.applyImpulse({ x: 0, y: -LATERAL_FORCE, z: 0 }, true);
       }
 
+      // Enforce minimum Y position to prevent going below the floor
+      if (currentPosition.y < MIN_Y) {
+        body.setTranslation(
+          { x: currentPosition.x, y: MIN_Y, z: currentPosition.z },
+          true,
+        );
+
+        // If the ship hits the floor, trigger collision
+        if (body.linvel().y < -5) {
+          onCollision();
+        }
+      }
+
       // Keep the ship at a fixed Z position
       body.setTranslation(
         { x: currentPosition.x, y: currentPosition.y, z: 0 },
-        true,
-      );
-
-      // Add a slight tilt based on horizontal movement
-      const velocity = body.linvel();
-      const tiltFactor = 0.2;
-      body.setRotation(
-        {
-          x: rotation[0],
-          y: rotation[1],
-          z: rotation[2] - velocity.x * tiltFactor,
-        },
         true,
       );
     }

@@ -79,7 +79,6 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({
         anchorX="right"
         anchorY="top"
       >
-        Updated: {new Date(priceData.lastUpdateTime).toLocaleTimeString()}
         {volatilityInfo && ` | ${volatilityInfo}`}
       </Text>
     </group>
