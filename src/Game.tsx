@@ -17,7 +17,7 @@ import CyberpunkEffects from './components/CyberpunkEffects';
 import NeonGrid from './components/NeonGrid';
 import PriceDataProvider, { PriceData } from './components/PriceFeed';
 import InstructionsPage from './components/InstructionsPage';
-import { useControls } from 'leva';
+import { useControls, Leva } from 'leva';
 import { Canvas } from '@react-three/fiber';
 import {
   Suspense,
@@ -35,6 +35,7 @@ import {
   calculateDifficultyMultiplier,
 } from './utils/priceUtils';
 import { Asset, AVAILABLE_ASSETS } from './components/AssetSelector';
+import { audioPlayer, AUDIO, initAudio } from './utils/audioUtils';
 
 useGLTF.preload('/models/ship.gltf');
 
@@ -288,6 +289,19 @@ const GameScene = () => {
 
       // Reset floor proximity bonus
       floorProximityBonusRef.current = 0;
+
+      // Calculate initial playback rate based on initial terrain speed
+      const normalizedSpeed =
+        (initialTerrainSpeed - MIN_TERRAIN_SPEED) /
+        (MAX_TERRAIN_SPEED - MIN_TERRAIN_SPEED);
+      const initialPlaybackRate = 0.8 + normalizedSpeed * (1.5 - 0.8);
+
+      // Play game music with initial playback rate
+      audioPlayer.playAudio(AUDIO.GAME_MUSIC, {
+        loop: true,
+        volume: 0.7,
+        playbackRate: initialPlaybackRate,
+      });
     }
   };
 
@@ -309,27 +323,28 @@ const GameScene = () => {
         // Reset score
         scoreRef.current = 0;
         setScore(0);
-
-        // Reset time tracking
         lastUpdateTimeRef.current = Date.now();
-
-        // Reset volatility data
-        const initialVolatilityData = initVolatilityData();
-        setVolatilityData(initialVolatilityData);
-        volatilityDataRef.current = initialVolatilityData;
-
-        // Reset difficulty
-        setDifficultyMultiplier(1.0);
 
         // Reset terrain speed to initial value
         setTerrainSpeed(initialTerrainSpeed);
 
-        // Reset ship position (the actual position will be set by the SpaceFighter component)
-        shipPositionRef.current = [0, 0, 0];
+        // Reset floor proximity bonus
         floorProximityBonusRef.current = 0;
 
-        console.log('Game completely reset - terrain should be regenerated');
-      }, 50); // Short delay to ensure state updates properly
+        // Calculate initial playback rate based on initial terrain speed
+        const normalizedSpeed =
+          (initialTerrainSpeed - MIN_TERRAIN_SPEED) /
+          (MAX_TERRAIN_SPEED - MIN_TERRAIN_SPEED);
+        const initialPlaybackRate = 0.8 + normalizedSpeed * (1.5 - 0.8);
+
+        // Reset and play game music with initial playback rate
+        audioPlayer.stopAudio(AUDIO.GAME_MUSIC);
+        audioPlayer.playAudio(AUDIO.GAME_MUSIC, {
+          loop: true,
+          volume: 0.7,
+          playbackRate: initialPlaybackRate,
+        });
+      }, 100);
     }
   };
 
@@ -339,6 +354,9 @@ const GameScene = () => {
       setExplosionPosition(shipPositionRef.current);
       setShowExplosion(true);
       setGameState('gameover');
+
+      // Stop the music on collision
+      audioPlayer.stopAudio(AUDIO.GAME_MUSIC);
     }
   };
 
@@ -361,12 +379,36 @@ const GameScene = () => {
     }
   };
 
+  // Update music playback rate based on terrain speed
+  useEffect(() => {
+    if (gameState === 'playing') {
+      // Map terrain speed to playback rate
+      // MIN_TERRAIN_SPEED (5) maps to 0.8 playback rate
+      // MAX_TERRAIN_SPEED (30) maps to 1.5 playback rate
+      const minRate = 0.8;
+      const maxRate = 1.5;
+      const normalizedSpeed =
+        (terrainSpeed - MIN_TERRAIN_SPEED) /
+        (MAX_TERRAIN_SPEED - MIN_TERRAIN_SPEED);
+      const playbackRate = minRate + normalizedSpeed * (maxRate - minRate);
+
+      // Update the music playback rate
+      audioPlayer.setPlaybackRate(AUDIO.GAME_MUSIC, playbackRate);
+    }
+  }, [terrainSpeed, gameState]);
+
+  // Initialize audio when component mounts
+  useEffect(() => {
+    initAudio();
+  }, []);
+
   return (
     <div
       style={{ width: '100vw', height: '100vh', background: '#000' }}
       tabIndex={0}
       onKeyDown={handleKeyDown}
     >
+      <Leva hidden />
       {/* Price Data Provider */}
       <PriceDataProvider
         onPriceUpdate={handlePriceUpdate}

@@ -21,7 +21,7 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({
     return (
       <Text
         position={[viewport.width / 2 - 2, viewport.height / 2 - 1, 0]}
-        fontSize={0.4}
+        fontSize={0.6}
         color="#ffffff"
         anchorX="right"
         anchorY="top"
@@ -57,7 +57,7 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({
       {/* Asset Name */}
       <Text
         position={[viewport.width / 2 - 2, viewport.height / 2 - 0.5, 0]}
-        fontSize={0.4}
+        fontSize={0.5}
         color="#66ccff"
         anchorX="right"
         anchorY="top"
@@ -66,38 +66,20 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({
         {assetName}
       </Text>
 
-      {/* Price */}
+      {/* Price with arrow */}
       <Text
-        position={[viewport.width / 2 - 2, viewport.height / 2 - 1, 0]}
-        fontSize={0.4}
+        position={[viewport.width / 2 - 2, viewport.height / 2 - 1.1, 0]}
+        fontSize={0.8}
         color="#ffffff"
         anchorX="right"
         anchorY="top"
+        font="/fonts/Orbitron-SemiBold.ttf"
+        fontWeight="bold"
       >
-        ${formattedPrice}
+        {priceArrow} ${formattedPrice}
       </Text>
 
-      {/* Price Change */}
-      <Text
-        position={[viewport.width / 2 - 2, viewport.height / 2 - 1.5, 0]}
-        fontSize={0.3}
-        color={priceColor}
-        anchorX="right"
-        anchorY="top"
-      >
-        {priceArrow} {priceChangePercent}%
-      </Text>
-
-      {/* Volatility Info */}
-      <Text
-        position={[viewport.width / 2 - 2, viewport.height / 2 - 2, 0]}
-        fontSize={0.2}
-        color="#aaaaaa"
-        anchorX="right"
-        anchorY="top"
-      >
-        {volatilityInfo && ` | ${volatilityInfo}`}
-      </Text>
+      {/* Remove separate arrow text since it's now part of the price */}
     </group>
   );
 };

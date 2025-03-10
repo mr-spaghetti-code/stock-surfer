@@ -3,7 +3,7 @@ import { Text } from '@react-three/drei';
 import PriceDisplay from './PriceDisplay';
 import { PriceData } from './PriceFeed';
 import { VolatilityData } from '../utils/priceUtils';
-import { useRef, useState } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
@@ -41,24 +41,28 @@ const GameUI = ({
   const buttonRef = useRef<THREE.Mesh>(null);
   const buttonGroupRef = useRef<THREE.Group>(null);
 
-  // Create materials for the background cards (for game over screen)
-  const darkPanelMaterial = new THREE.MeshBasicMaterial({
-    color: '#000033',
-    transparent: true,
-    opacity: 0.8,
-  });
-
-  const headerPanelMaterial = new THREE.MeshBasicMaterial({
-    color: '#330022',
-    transparent: true,
-    opacity: 0.9,
-  });
-
-  const contentPanelMaterial = new THREE.MeshBasicMaterial({
-    color: '#000022',
-    transparent: true,
-    opacity: 0.85,
-  });
+  // Create materials once
+  const materials = useMemo(() => {
+    return {
+      darkPanel: new THREE.MeshBasicMaterial({
+        color: '#000033',
+        transparent: true,
+        opacity: 0.8,
+      }),
+      progressBarBg: new THREE.MeshBasicMaterial({ color: '#222222' }),
+      progressBarFill: new THREE.MeshBasicMaterial({ color: '#00ffff' }),
+      headerPanel: new THREE.MeshBasicMaterial({
+        color: '#000066',
+        transparent: true,
+        opacity: 0.9,
+      }),
+      contentPanel: new THREE.MeshBasicMaterial({
+        color: '#000022',
+        transparent: true,
+        opacity: 0.85,
+      }),
+    };
+  }, []);
 
   // Button materials
   const buttonMaterial = new THREE.MeshBasicMaterial({
@@ -101,19 +105,44 @@ const GameUI = ({
           anchorY="middle"
           font="/fonts/Orbitron-SemiBold.ttf"
         >
-          SPACE SURFER
+          BTC SURFER
         </Text>
 
-        <Text
-          position={[0, 0, 0]}
-          fontSize={0.5}
-          color="#aaaaaa"
-          anchorX="center"
-          anchorY="middle"
-        >
-          Collecting price data... ({volatilityData.priceHistory.length}/
-          {requiredSamples})
-        </Text>
+        {/* Progress Bar */}
+        <group position={[0, 0, 0]}>
+          {/* Progress Bar Background */}
+          <mesh position={[0, 0, -0.01]} material={materials.progressBarBg}>
+            <planeGeometry args={[4, 0.4]} />
+          </mesh>
+
+          {/* Progress Bar Fill */}
+          <mesh
+            position={[
+              -2 + (volatilityData.priceHistory.length / requiredSamples) * 2,
+              0,
+              0,
+            ]}
+            material={materials.progressBarFill}
+          >
+            <planeGeometry
+              args={[
+                4 * (volatilityData.priceHistory.length / requiredSamples),
+                0.4,
+              ]}
+            />
+          </mesh>
+
+          {/* Progress Text */}
+          <Text
+            position={[0, 0, 0.01]}
+            fontSize={0.2}
+            color="#ffffff"
+            anchorX="center"
+            anchorY="middle"
+          >
+            {`${volatilityData.priceHistory.length}/${requiredSamples}`}
+          </Text>
+        </group>
 
         <PriceDisplay
           priceData={priceData}
@@ -129,13 +158,13 @@ const GameUI = ({
     return (
       <group position={[0, 0, 0]}>
         {/* Main background panel */}
-        <mesh position={[0, 0, -0.1]} material={darkPanelMaterial}>
+        <mesh position={[0, 0, -0.1]} material={materials.darkPanel}>
           <planeGeometry args={[viewport.width * 0.9, viewport.height * 0.9]} />
         </mesh>
 
         {/* Header Section */}
         <group position={[0, 3, 0]}>
-          <mesh position={[0, 0, -0.05]} material={headerPanelMaterial}>
+          <mesh position={[0, 0, -0.05]} material={materials.headerPanel}>
             <planeGeometry args={[viewport.width * 0.8, 2.5]} />
           </mesh>
           <Text
@@ -152,7 +181,7 @@ const GameUI = ({
 
         {/* Score Section */}
         <group position={[0, 0.5, 0]}>
-          <mesh position={[0, 0, -0.05]} material={contentPanelMaterial}>
+          <mesh position={[0, 0, -0.05]} material={materials.contentPanel}>
             <planeGeometry args={[viewport.width * 0.7, 3.5]} />
           </mesh>
 
@@ -165,26 +194,6 @@ const GameUI = ({
             font="/fonts/Orbitron-Medium.ttf"
           >
             Final Score: {score}
-          </Text>
-
-          <Text
-            position={[0, 0, 0]}
-            fontSize={0.4}
-            color="#ffaa00"
-            anchorX="center"
-            anchorY="middle"
-          >
-            Difficulty: {difficultyMultiplier.toFixed(2)}x
-          </Text>
-
-          <Text
-            position={[0, -1, 0]}
-            fontSize={0.35}
-            color="#aaddff"
-            anchorX="center"
-            anchorY="middle"
-          >
-            Market Volatility: {(volatilityData.volatility * 100).toFixed(1)}%
           </Text>
         </group>
 
@@ -236,18 +245,11 @@ const GameUI = ({
         color="#ffffff"
         anchorX="left"
         anchorY="top"
+        font="/fonts/Orbitron-Medium.ttf"
       >
         Score: {score}
       </Text>
-      <Text
-        position={[-viewport.width / 2 + 2, viewport.height / 2 - 1.8, 0]}
-        fontSize={0.3}
-        color="#ffaa00"
-        anchorX="left"
-        anchorY="top"
-      >
-        Difficulty: {difficultyMultiplier.toFixed(2)}x
-      </Text>
+
       {floorProximityBonus > 0 && (
         <Text
           position={[-viewport.width / 2 + 2, viewport.height / 2 - 2.6, 0]}
@@ -265,6 +267,7 @@ const GameUI = ({
         color={priceData && priceData.priceChange < 0 ? '#ff3333' : '#33ff33'}
         anchorX="left"
         anchorY="top"
+        font="/fonts/Orbitron-Medium.ttf"
       >
         Speed: {terrainSpeed.toFixed(1)}
       </Text>
