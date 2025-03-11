@@ -32,7 +32,7 @@ interface SpaceFighterProps {
 
 // Define a type for the position update function
 type PositionUpdateFunction = (
-  pos: [number, number, number],
+  shipPosition: [number, number, number],
   proximityBonus?: number,
 ) => void;
 
@@ -53,6 +53,12 @@ const SpaceFighter = ({
   const rigidBodyRef = useRef<RapierRigidBody>(null);
   // Reference to the mesh for visual effects
   const meshRef = useRef<THREE.Mesh>(null);
+  // Reference for the laser sight dot
+  const laserDotRef = useRef<THREE.Mesh>(null);
+  // State to track if the laser dot is visible
+  const [laserDotVisible, setLaserDotVisible] = useState(false);
+  // Use ref for laser dot position to avoid unnecessary re-renders
+  const laserDotPositionRef = useRef<[number, number, number]>([0, 0, -10]);
 
   // State to track key presses
   const [isSpacePressed, setIsSpacePressed] = useState(false);
@@ -79,6 +85,11 @@ const SpaceFighter = ({
   // Constants for floor proximity bonus
   const BONUS_START_HEIGHT = -8; // Height at which bonus starts to apply
   const MAX_BONUS_MULTIPLIER = 3.0; // Maximum bonus multiplier when at minimum height
+
+  // Create a raycaster for the laser sight
+  const raycaster = new THREE.Raycaster();
+  // Maximum distance for the raycast
+  const MAX_RAYCAST_DISTANCE = 100;
 
   // Enhance the material with cyberpunk effects
   useEffect(() => {
@@ -176,7 +187,7 @@ const SpaceFighter = ({
   }, [isSpacePressed, isUpPressed, isLeftPressed, isRightPressed]);
 
   // Apply forces using Rapier physics
-  useFrame(() => {
+  useFrame((state) => {
     if (rigidBodyRef.current && gameState === 'playing') {
       const body = rigidBodyRef.current;
       const currentPosition = body.translation();
@@ -328,41 +339,145 @@ const SpaceFighter = ({
         { x: currentPosition.x, y: currentPosition.y, z: 0 },
         true,
       );
+
+      // Update laser sight
+      if (meshRef.current) {
+        // Get the ship's world position and rotation
+        const shipPosition = new THREE.Vector3(
+          currentPosition.x,
+          currentPosition.y,
+          currentPosition.z,
+        );
+
+        // Create a direction vector pointing forward from the ship
+        // Adjust for the ship's rotation in the scene
+        const direction = new THREE.Vector3(0, 0, -1);
+        const quaternion = new THREE.Quaternion(
+          currentRotation.x,
+          currentRotation.y,
+          currentRotation.z,
+          currentRotation.w,
+        );
+        direction.applyQuaternion(quaternion);
+
+        // Set the raycaster origin and direction
+        raycaster.set(shipPosition, direction);
+
+        // Get all objects in the scene that could be intersected
+        const intersectableObjects: THREE.Object3D[] = [];
+        state.scene.traverse((object) => {
+          // Only include meshes that are not the ship itself or the laser dot
+          if (
+            object instanceof THREE.Mesh &&
+            object !== meshRef.current &&
+            object !== laserDotRef.current &&
+            // Exclude objects with names that indicate they're not part of the terrain
+            !object.name.includes('thruster') &&
+            !object.name.includes('explosion')
+          ) {
+            intersectableObjects.push(object);
+          }
+        });
+
+        // Cast the ray and check for intersections
+        const intersects = raycaster.intersectObjects(intersectableObjects);
+
+        if (intersects.length > 0) {
+          // Get the first intersection point
+          const hitPoint = intersects[0].point;
+
+          // Update the laser dot position
+          laserDotPositionRef.current = [hitPoint.x, hitPoint.y, hitPoint.z];
+          setLaserDotVisible(true);
+
+          // Update the laser dot mesh position directly
+          if (laserDotRef.current) {
+            laserDotRef.current.position.set(
+              hitPoint.x,
+              hitPoint.y,
+              hitPoint.z,
+            );
+          }
+        } else {
+          // If no intersection, position the dot at a fixed distance in front of the ship
+          const farPoint = shipPosition
+            .clone()
+            .add(direction.multiplyScalar(MAX_RAYCAST_DISTANCE));
+          laserDotPositionRef.current = [farPoint.x, farPoint.y, farPoint.z];
+          setLaserDotVisible(false);
+
+          // Update the laser dot mesh position directly
+          if (laserDotRef.current) {
+            laserDotRef.current.position.set(
+              farPoint.x,
+              farPoint.y,
+              farPoint.z,
+            );
+          }
+        }
+      }
     }
   });
 
   return (
-    <RigidBody
-      ref={rigidBodyRef}
-      position={position}
-      rotation={rotation}
-      colliders="hull"
-      mass={1}
-      linearDamping={0.95}
-      angularDamping={2.5}
-      sensor
-      onIntersectionEnter={onCollision}
-    >
-      <mesh
-        ref={meshRef}
-        geometry={nodes.model.geometry}
-        material={materials.CustomMaterial}
-        scale={scale}
-        castShadow
-        receiveShadow
-        rotation={[-Math.PI / 2, Math.PI, 0]}
-      />
-
-      {/* Add the thruster effect behind the ship, positioned correctly for the ship's rotation */}
-      <group rotation={[-Math.PI / 2, Math.PI, 0]}>
-        <ThrusterEffect
-          position={[0, -0.7, 0]}
-          scale={scale * 1.2}
-          isActive={thrustersActive && gameState === 'playing'}
-          color="#00ffff"
+    <>
+      <RigidBody
+        ref={rigidBodyRef}
+        position={position}
+        rotation={rotation}
+        colliders="hull"
+        mass={1}
+        linearDamping={0.95}
+        angularDamping={2.5}
+        sensor
+        onIntersectionEnter={onCollision}
+      >
+        <mesh
+          ref={meshRef}
+          geometry={nodes.model.geometry}
+          material={materials.CustomMaterial}
+          scale={scale}
+          castShadow
+          receiveShadow
+          rotation={[-Math.PI / 2, Math.PI, 0]}
         />
-      </group>
-    </RigidBody>
+
+        {/* Add the thruster effect behind the ship, positioned correctly for the ship's rotation */}
+        <group rotation={[-Math.PI / 2, Math.PI, 0]}>
+          <ThrusterEffect
+            position={[0, -0.7, 0]}
+            scale={scale * 1.2}
+            isActive={thrustersActive && gameState === 'playing'}
+            color="#00ffff"
+          />
+        </group>
+      </RigidBody>
+
+      {/* Laser sight dot */}
+      {gameState === 'playing' && (
+        <group position={laserDotPositionRef.current} visible={laserDotVisible}>
+          {/* Main dot */}
+          <mesh
+            ref={laserDotRef}
+            renderOrder={10} // Ensure it renders on top of other objects
+          >
+            <sphereGeometry args={[0.5, 16, 16]} />
+            <meshBasicMaterial color="#ff3333" toneMapped={false} />
+          </mesh>
+
+          {/* Glow effect */}
+          <mesh renderOrder={9}>
+            <sphereGeometry args={[1.0, 16, 16]} />
+            <meshBasicMaterial
+              color="#ff3333"
+              transparent={true}
+              opacity={0.3}
+              toneMapped={false}
+            />
+          </mesh>
+        </group>
+      )}
+    </>
   );
 };
 
