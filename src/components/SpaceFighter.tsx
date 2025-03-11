@@ -1,6 +1,6 @@
 import { useGLTF } from '@react-three/drei';
-import { useFrame } from '@react-three/fiber';
-import { useRef, useState, useEffect } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { GLTF } from 'three-stdlib';
 import { RigidBody } from '@react-three/rapier';
@@ -32,8 +32,8 @@ interface SpaceFighterProps {
 
 // Define a type for the position update function
 type PositionUpdateFunction = (
-  shipPosition: [number, number, number],
-  proximityBonus?: number,
+  _position: [number, number, number],
+  _proximityBonus?: number,
 ) => void;
 
 const SpaceFighter = ({
@@ -44,6 +44,9 @@ const SpaceFighter = ({
   onCollision,
   onPositionUpdate,
 }: SpaceFighterProps) => {
+  // Access the default camera and set
+  const { camera: defaultCamera, set } = useThree();
+
   // Load the ship model
   const { nodes, materials } = useGLTF(
     '/models/ship.gltf',
@@ -59,6 +62,31 @@ const SpaceFighter = ({
   const [laserDotVisible, setLaserDotVisible] = useState(false);
   // Use ref for laser dot position to avoid unnecessary re-renders
   const laserDotPositionRef = useRef<[number, number, number]>([0, 0, -10]);
+  // State to track camera mode (first-person or third-person)
+  const [isFirstPerson, setIsFirstPerson] = useState(false);
+  // Ref to track the current camera mode (for more reliable access in event handlers)
+  const isFirstPersonRef = useRef(false);
+  // State for showing the mode change notification
+  const [showModeNotification, setShowModeNotification] = useState(false);
+  const modeNotificationTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+
+  // Create a first-person camera
+  const fpCamera = useMemo(() => {
+    const camera = new THREE.PerspectiveCamera(
+      75, // Narrower FOV for better focus
+      typeof globalThis.window !== 'undefined'
+        ? globalThis.window.innerWidth / globalThis.window.innerHeight
+        : 1,
+      0.1,
+      1000,
+    );
+    // Initialize with correct rotation
+    camera.position.set(0, 0.5, 0);
+    camera.rotation.set(-Math.PI / 2, Math.PI, 0);
+    return camera;
+  }, []);
 
   // State to track key presses
   const [isSpacePressed, setIsSpacePressed] = useState(false);
@@ -84,7 +112,7 @@ const SpaceFighter = ({
 
   // Constants for floor proximity bonus
   const BONUS_START_HEIGHT = -8; // Height at which bonus starts to apply
-  const MAX_BONUS_MULTIPLIER = 3.0; // Maximum bonus multiplier when at minimum height
+  const MAX_BONUS_MULTIPLIER = 3.0;
 
   // Create a raycaster for the laser sight
   const raycaster = new THREE.Raycaster();
@@ -129,6 +157,42 @@ const SpaceFighter = ({
         case 'ArrowDown':
         case 'KeyS':
           setIsDownPressed(true);
+          break;
+        case 'KeyF':
+          // Toggle first-person view when F is pressed
+          // Use the ref for the current state to ensure correct toggling
+          const newMode = !isFirstPersonRef.current;
+          console.log(
+            'F key pressed - Current mode (from ref):',
+            isFirstPersonRef.current,
+          );
+          console.log(
+            'F key pressed - Setting camera mode to:',
+            newMode ? 'First Person' : 'Default',
+          );
+
+          // Update the state
+          setIsFirstPerson(newMode);
+
+          // Directly set the camera based on the new mode
+          if (newMode) {
+            set({ camera: fpCamera });
+          } else {
+            set({ camera: defaultCamera });
+          }
+
+          // Show notification
+          setShowModeNotification(true);
+
+          // Clear any existing timeout
+          if (modeNotificationTimeoutRef.current) {
+            clearTimeout(modeNotificationTimeoutRef.current);
+          }
+
+          // Hide notification after 2 seconds
+          modeNotificationTimeoutRef.current = setTimeout(() => {
+            setShowModeNotification(false);
+          }, 2000);
           break;
       }
     };
@@ -186,12 +250,61 @@ const SpaceFighter = ({
     );
   }, [isSpacePressed, isUpPressed, isLeftPressed, isRightPressed]);
 
-  // Apply forces using Rapier physics
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (modeNotificationTimeoutRef.current) {
+        clearTimeout(modeNotificationTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Effect to update the ref when the state changes
+  useEffect(() => {
+    isFirstPersonRef.current = isFirstPerson;
+  }, [isFirstPerson]);
+
+  // Remove the camera update from useFrame to avoid conflicts
   useFrame((state) => {
     if (rigidBodyRef.current && gameState === 'playing') {
       const body = rigidBodyRef.current;
       const currentPosition = body.translation();
       const currentRotation = body.rotation();
+
+      // Update first-person camera position and rotation if in first-person mode
+      if (isFirstPerson) {
+        // Position the camera at the ship's position with a slight offset forward and up
+        fpCamera.position.set(
+          currentPosition.x,
+          currentPosition.y + 0.3, // Position at the cockpit level
+          currentPosition.z - 0.5, // More forward for better view
+        );
+
+        // Create a quaternion from the ship's rotation
+        const shipQuaternion = new THREE.Quaternion(
+          currentRotation.x,
+          currentRotation.y,
+          currentRotation.z,
+          currentRotation.w,
+        );
+
+        // Create a quaternion for the initial rotation adjustment (match the ship's model orientation)
+        const adjustmentQuaternion = new THREE.Quaternion().setFromEuler(
+          new THREE.Euler(-Math.PI, Math.PI, Math.PI),
+        );
+
+        // Combine the quaternions: first apply the adjustment, then the ship's rotation
+        const finalQuaternion = new THREE.Quaternion().multiplyQuaternions(
+          shipQuaternion,
+          adjustmentQuaternion,
+        );
+
+        // Apply the combined rotation
+        fpCamera.quaternion.copy(finalQuaternion);
+
+        // Make sure the camera is properly initialized
+        fpCamera.updateProjectionMatrix();
+      }
 
       // Calculate floor proximity bonus
       let floorProximityBonus = 0;
@@ -227,95 +340,32 @@ const SpaceFighter = ({
         body.applyTorqueImpulse({ x: 0, y: 0, z: -ROLL_FORCE }, true);
       }
 
-      // Apply vertical movement with pitch effect
+      // Apply vertical movement
       if (isUpPressed && currentPosition.y < MAX_Y) {
         body.applyImpulse({ x: 0, y: LATERAL_FORCE, z: 0 }, true);
-        // Add slight pitch up (positive x-axis rotation) when moving up
-        body.applyTorqueImpulse({ x: ROLL_FORCE * 0.5, y: 0, z: 0 }, true);
       }
-      if (isDownPressed && currentPosition.y > -MIN_Y) {
+      if (isDownPressed && currentPosition.y > MIN_Y) {
         body.applyImpulse({ x: 0, y: -LATERAL_FORCE, z: 0 }, true);
-        // Add slight pitch down (negative x-axis rotation) when moving down
-        body.applyTorqueImpulse({ x: -ROLL_FORCE * 0.5, y: 0, z: 0 }, true);
       }
 
-      // Improved auto-stabilization for roll and pitch
-      if (!isLeftPressed && !isRightPressed && !isUpPressed && !isDownPressed) {
-        const euler = new THREE.Euler().setFromQuaternion(
-          new THREE.Quaternion(
-            currentRotation.x,
-            currentRotation.y,
-            currentRotation.z,
-            currentRotation.w,
-          ),
-        );
-
-        // If the ship is rolled, apply a counter-torque to level it out
-        if (Math.abs(euler.z) > 0.01) {
-          const stabilizingForce = -Math.sign(euler.z) * ROLL_RECOVERY_SPEED;
-          body.applyTorqueImpulse({ x: 0, y: 0, z: stabilizingForce }, true);
-        }
-
-        // If the ship is pitched, apply a counter-torque to level it out
-        if (Math.abs(euler.x) > 0.01) {
-          const stabilizingForce = -Math.sign(euler.x) * ROLL_RECOVERY_SPEED;
-          body.applyTorqueImpulse({ x: stabilizingForce, y: 0, z: 0 }, true);
-        }
-      } else {
-        // Partial stabilization even during movement for more controlled flight
-        const euler = new THREE.Euler().setFromQuaternion(
-          new THREE.Quaternion(
-            currentRotation.x,
-            currentRotation.y,
-            currentRotation.z,
-            currentRotation.w,
-          ),
-        );
-
-        // Apply partial stabilization for roll
-        if (Math.abs(euler.z) > 0.1) {
-          const stabilizingForce =
-            -Math.sign(euler.z) * ROLL_RECOVERY_SPEED * 0.3;
-          body.applyTorqueImpulse({ x: 0, y: 0, z: stabilizingForce }, true);
-        }
-
-        // Apply partial stabilization for pitch
-        if (Math.abs(euler.x) > 0.1) {
-          const stabilizingForce =
-            -Math.sign(euler.x) * ROLL_RECOVERY_SPEED * 0.3;
-          body.applyTorqueImpulse({ x: stabilizingForce, y: 0, z: 0 }, true);
-        }
+      // Apply roll recovery - gradually return to level flight
+      const currentRoll = body.rotation().z;
+      if (Math.abs(currentRoll) > 0.01 && !isLeftPressed && !isRightPressed) {
+        // Apply a torque in the opposite direction of the current roll
+        const recoveryTorque = -currentRoll * ROLL_RECOVERY_SPEED;
+        body.applyTorqueImpulse({ x: 0, y: 0, z: recoveryTorque }, true);
       }
 
-      // Limit maximum roll angle
-      const euler = new THREE.Euler().setFromQuaternion(
-        new THREE.Quaternion(
-          currentRotation.x,
-          currentRotation.y,
-          currentRotation.z,
-          currentRotation.w,
-        ),
-      );
-
-      if (Math.abs(euler.z) > MAX_ROLL_ANGLE) {
-        // Create a new quaternion with limited roll
-        const limitedEuler = new THREE.Euler(
-          euler.x,
-          euler.y,
-          Math.sign(euler.z) * MAX_ROLL_ANGLE,
-          euler.order,
-        );
-        const limitedQuaternion = new THREE.Quaternion().setFromEuler(
-          limitedEuler,
-        );
-
-        // Apply the limited rotation
+      // Enforce maximum roll angle
+      if (Math.abs(currentRoll) > MAX_ROLL_ANGLE) {
+        const clampedRoll = Math.sign(currentRoll) * MAX_ROLL_ANGLE;
+        const currentQuat = body.rotation();
         body.setRotation(
           {
-            x: limitedQuaternion.x,
-            y: limitedQuaternion.y,
-            z: limitedQuaternion.z,
-            w: limitedQuaternion.w,
+            x: currentQuat.x,
+            y: currentQuat.y,
+            z: clampedRoll,
+            w: currentQuat.w,
           },
           true,
         );
@@ -475,6 +525,100 @@ const SpaceFighter = ({
               toneMapped={false}
             />
           </mesh>
+        </group>
+      )}
+
+      {/* First-person mode indicator */}
+      {isFirstPerson && gameState === 'playing' && (
+        <>
+          {/* Crosshair */}
+          <group position={[0, 0, -2]}>
+            {/* Horizontal line */}
+            <mesh position={[0, 0, -1]}>
+              <boxGeometry args={[0.03, 0.003, 0.001]} />
+              <meshBasicMaterial color="#00ff00" />
+            </mesh>
+            {/* Vertical line */}
+            <mesh position={[0, 0, -1]}>
+              <boxGeometry args={[0.003, 0.03, 0.001]} />
+              <meshBasicMaterial color="#00ff00" />
+            </mesh>
+            {/* Center dot */}
+            <mesh position={[0, 0, -0.99]}>
+              <circleGeometry args={[0.001, 8]} />
+              <meshBasicMaterial color="#ff0000" />
+            </mesh>
+          </group>
+        </>
+      )}
+
+      {/* Mode change notification */}
+      {showModeNotification && gameState === 'playing' && (
+        <group position={[0, 2, -5]}>
+          <mesh position={[0, 0, -1]}>
+            <planeGeometry args={[3, 0.5]} />
+            <meshBasicMaterial
+              color={isFirstPerson ? '#00ff00' : '#ff9900'}
+              transparent
+              opacity={0.7}
+            />
+          </mesh>
+          {/* Text indicator */}
+          <group position={[0, 0, -0.9]}>
+            {isFirstPerson ? (
+              // First-person mode indicators (simple shapes to spell "FIRST PERSON")
+              <>
+                <mesh position={[-1.2, 0, 0]}>
+                  <boxGeometry args={[0.1, 0.3, 0.001]} />
+                  <meshBasicMaterial color="#ffffff" />
+                </mesh>
+                <mesh position={[-0.9, 0, 0]}>
+                  <boxGeometry args={[0.3, 0.1, 0.001]} />
+                  <meshBasicMaterial color="#ffffff" />
+                </mesh>
+                <mesh position={[-0.5, 0, 0]}>
+                  <boxGeometry args={[0.1, 0.3, 0.001]} />
+                  <meshBasicMaterial color="#ffffff" />
+                </mesh>
+                <mesh position={[0, 0, 0]}>
+                  <boxGeometry args={[0.3, 0.1, 0.001]} />
+                  <meshBasicMaterial color="#ffffff" />
+                </mesh>
+                <mesh position={[0.5, 0, 0]}>
+                  <boxGeometry args={[0.1, 0.3, 0.001]} />
+                  <meshBasicMaterial color="#ffffff" />
+                </mesh>
+                <mesh position={[1.0, 0, 0]}>
+                  <boxGeometry args={[0.3, 0.3, 0.001]} />
+                  <meshBasicMaterial color="#ffffff" />
+                </mesh>
+              </>
+            ) : (
+              // Third-person mode indicators (simple shapes to spell "DEFAULT VIEW")
+              <>
+                <mesh position={[-1.2, 0, 0]}>
+                  <boxGeometry args={[0.3, 0.3, 0.001]} />
+                  <meshBasicMaterial color="#ffffff" />
+                </mesh>
+                <mesh position={[-0.7, 0, 0]}>
+                  <boxGeometry args={[0.1, 0.3, 0.001]} />
+                  <meshBasicMaterial color="#ffffff" />
+                </mesh>
+                <mesh position={[-0.2, 0, 0]}>
+                  <boxGeometry args={[0.3, 0.1, 0.001]} />
+                  <meshBasicMaterial color="#ffffff" />
+                </mesh>
+                <mesh position={[0.3, 0, 0]}>
+                  <boxGeometry args={[0.1, 0.3, 0.001]} />
+                  <meshBasicMaterial color="#ffffff" />
+                </mesh>
+                <mesh position={[0.8, 0, 0]}>
+                  <boxGeometry args={[0.3, 0.3, 0.001]} />
+                  <meshBasicMaterial color="#ffffff" />
+                </mesh>
+              </>
+            )}
+          </group>
         </group>
       )}
     </>
