@@ -9,7 +9,6 @@ interface PriceDisplayProps {
   volatilityData?: VolatilityData;
   assetName?: string;
 }
-
 const PriceDisplay: React.FC<PriceDisplayProps> = ({
   priceData,
   volatilityData,
@@ -70,7 +69,7 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({
       <Text
         position={[viewport.width / 2 - 2, viewport.height / 2 - 1.1, 0]}
         fontSize={0.8}
-        color="#ffffff"
+        color={priceColor}
         anchorX="right"
         anchorY="top"
         font="/fonts/Orbitron-SemiBold.ttf"

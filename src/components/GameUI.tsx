@@ -61,6 +61,8 @@ const GameUI = ({
         transparent: true,
         opacity: 0.85,
       }),
+      speedBarBg: new THREE.MeshBasicMaterial({ color: '#333333' }),
+      speedBarFill: new THREE.MeshBasicMaterial({ color: '#ff3366' }),
     };
   }, []);
 
@@ -239,16 +241,43 @@ const GameUI = ({
   // In-game UI (score and difficulty)
   return (
     <>
-      <Text
-        position={[-viewport.width / 2 + 2, viewport.height / 2 - 1, 0]}
-        fontSize={0.5}
-        color="#ffffff"
-        anchorX="left"
-        anchorY="top"
-        font="/fonts/Orbitron-Medium.ttf"
-      >
-        Score: {score}
-      </Text>
+      {/* Score and Speed Display Group */}
+      <group position={[-viewport.width / 2 + 2, viewport.height / 2 - 1, 0]}>
+        <Text
+          position={[0, 0, 0]}
+          fontSize={0.5}
+          color="#ffffff"
+          anchorX="left"
+          anchorY="top"
+          font="/fonts/Orbitron-Medium.ttf"
+        >
+          Score: {score}
+        </Text>
+
+        <Text
+          position={[0, -1.2, 0]}
+          fontSize={0.8}
+          color={priceData && priceData.priceChange < 0 ? '#ff3333' : '#33ff33'}
+          anchorX="left"
+          anchorY="top"
+          font="/fonts/Orbitron-Medium.ttf"
+        >
+          {terrainSpeed.toFixed(1)}
+        </Text>
+
+        {/* Speed Bar */}
+        <group position={[0, -0.8, 0]}>
+          <mesh position={[1.5, 0, -0.01]} material={materials.speedBarBg}>
+            <planeGeometry args={[3, 0.2]} />
+          </mesh>
+          <mesh
+            position={[1.5 * (terrainSpeed / 30), 0, 0]}
+            material={materials.speedBarFill}
+          >
+            <planeGeometry args={[3 * (terrainSpeed / 30), 0.2]} />
+          </mesh>
+        </group>
+      </group>
 
       {floorProximityBonus > 0 && (
         <Text
@@ -261,16 +290,7 @@ const GameUI = ({
           Floor Bonus: +{(floorProximityBonus * 100).toFixed(0)}%
         </Text>
       )}
-      <Text
-        position={[-viewport.width / 2 + 2, viewport.height / 2 - 3.4, 0]}
-        fontSize={0.3}
-        color={priceData && priceData.priceChange < 0 ? '#ff3333' : '#33ff33'}
-        anchorX="left"
-        anchorY="top"
-        font="/fonts/Orbitron-Medium.ttf"
-      >
-        Speed: {terrainSpeed.toFixed(1)}
-      </Text>
+
       <PriceDisplay
         priceData={priceData}
         volatilityData={volatilityData}
