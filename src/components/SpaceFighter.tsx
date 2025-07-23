@@ -32,8 +32,8 @@ interface SpaceFighterProps {
 
 // Define a type for the position update function
 type PositionUpdateFunction = (
-  _position: [number, number, number],
-  _proximityBonus?: number,
+  position: [number, number, number],
+  proximityBonus?: number,
 ) => void;
 
 const SpaceFighter = ({
@@ -158,7 +158,7 @@ const SpaceFighter = ({
         case 'KeyS':
           setIsDownPressed(true);
           break;
-        case 'KeyF':
+        case 'KeyF': {
           // Toggle first-person view when F is pressed
           // Use the ref for the current state to ensure correct toggling
           const newMode = !isFirstPersonRef.current;
@@ -194,6 +194,7 @@ const SpaceFighter = ({
             setShowModeNotification(false);
           }, 2000);
           break;
+        }
       }
     };
 
@@ -266,44 +267,60 @@ const SpaceFighter = ({
 
   // Remove the camera update from useFrame to avoid conflicts
   useFrame((state) => {
-    if (rigidBodyRef.current && gameState === 'playing') {
+    if (
+      rigidBodyRef.current &&
+      (gameState === 'playing' || (gameState === 'gameover' && isFirstPerson))
+    ) {
       const body = rigidBodyRef.current;
       const currentPosition = body.translation();
       const currentRotation = body.rotation();
 
       // Update first-person camera position and rotation if in first-person mode
       if (isFirstPerson) {
-        // Position the camera at the ship's position with a slight offset forward and up
-        fpCamera.position.set(
-          currentPosition.x,
-          currentPosition.y + 0.3, // Position at the cockpit level
-          currentPosition.z - 0.5, // More forward for better view
-        );
+        // For game over state, position the camera to view the game over screen
+        if (gameState === 'gameover') {
+          // Position the camera in front of the game over UI
+          fpCamera.position.set(0, 0, 15);
 
-        // Create a quaternion from the ship's rotation
-        const shipQuaternion = new THREE.Quaternion(
-          currentRotation.x,
-          currentRotation.y,
-          currentRotation.z,
-          currentRotation.w,
-        );
+          // Reset rotation to look directly at the game over screen
+          fpCamera.quaternion.setFromEuler(new THREE.Euler(0, 0, 0));
 
-        // Create a quaternion for the initial rotation adjustment (match the ship's model orientation)
-        const adjustmentQuaternion = new THREE.Quaternion().setFromEuler(
-          new THREE.Euler(-Math.PI, Math.PI, Math.PI),
-        );
+          // Make sure the camera is properly initialized
+          fpCamera.updateProjectionMatrix();
+        } else {
+          // Normal gameplay camera positioning
+          // Position the camera at the ship's position with a slight offset forward and up
+          fpCamera.position.set(
+            currentPosition.x,
+            currentPosition.y + 0.3, // Position at the cockpit level
+            currentPosition.z - 0.5, // More forward for better view
+          );
 
-        // Combine the quaternions: first apply the adjustment, then the ship's rotation
-        const finalQuaternion = new THREE.Quaternion().multiplyQuaternions(
-          shipQuaternion,
-          adjustmentQuaternion,
-        );
+          // Create a quaternion from the ship's rotation
+          const shipQuaternion = new THREE.Quaternion(
+            currentRotation.x,
+            currentRotation.y,
+            currentRotation.z,
+            currentRotation.w,
+          );
 
-        // Apply the combined rotation
-        fpCamera.quaternion.copy(finalQuaternion);
+          // Create a quaternion for the initial rotation adjustment (match the ship's model orientation)
+          const adjustmentQuaternion = new THREE.Quaternion().setFromEuler(
+            new THREE.Euler(-Math.PI, Math.PI, Math.PI),
+          );
 
-        // Make sure the camera is properly initialized
-        fpCamera.updateProjectionMatrix();
+          // Combine the quaternions: first apply the adjustment, then the ship's rotation
+          const finalQuaternion = new THREE.Quaternion().multiplyQuaternions(
+            shipQuaternion,
+            adjustmentQuaternion,
+          );
+
+          // Apply the combined rotation
+          fpCamera.quaternion.copy(finalQuaternion);
+
+          // Make sure the camera is properly initialized
+          fpCamera.updateProjectionMatrix();
+        }
       }
 
       // Calculate floor proximity bonus
